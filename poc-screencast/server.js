@@ -447,7 +447,7 @@ wss.on('connection', (ws) => {
         const old = findStep(msg.id);
         const clean = sanitizeStep(msg.step);
         // ชื่อตัวเลือก dropdown ใช้แสดงผลเท่านั้น ถ้าค่าเปลี่ยนชื่อเดิมจะผิด
-        if (clean.action === 'selectOption' && clean.value !== old.value) delete clean.label;
+        if (clean.action === 'selectOption' && clean.value !== old.value && !msg.step.label) delete clean.label;
         if (clean.action === 'useTest' && clean.testId === currentTest.id) throw new Error('ใช้เทสนี้ซ้ำในตัวเองไม่ได้');
         if (clean.secret && msg.secretValue) db.secrets.set(currentTest.projectId, clean.secret, msg.secretValue);
         steps[steps.indexOf(old)] = { ...clean, id: old.id };
@@ -483,6 +483,9 @@ wss.on('connection', (ws) => {
         }
         break;
       }
+      case 'selectOptions':
+        send({ type: 'selectOptions', ...(await readSelectOptions(msg.locator)) });
+        break;
       case 'clearHighlight':
         await clearHighlight(page);
         break;
@@ -559,6 +562,24 @@ wss.on('connection', (ws) => {
       addStep({ action, ...target });
     }
     await page.mouse.down({ button: msg.button });
+  }
+
+  // ตัวเลือกของ dropdown ในหน้าที่เปิดอยู่ ให้ Step Editor แสดงเป็นรายการ (ผู้ใช้ไม่ต้องรู้ value)
+  async function readSelectOptions(rawLocator) {
+    try {
+      const { locator } = sanitizeStep({ action: 'click', locator: rawLocator });
+      if (!locator) return { error: 'ยังไม่ได้เลือก dropdown' };
+      const L = toLocator(page, locator);
+      const count = await L.count();
+      if (count === 0) return { error: 'ไม่พบ dropdown นี้ในหน้าที่เปิดอยู่' };
+      if (count > 1) return { error: `locator นี้เจอ ${count} ตัว` };
+      const options = await L.evaluate((el) =>
+        el.tagName === 'SELECT' ? [...el.options].map((o) => ({ value: o.value, label: o.label || o.text })) : null
+      );
+      return options ? { options } : { error: 'element นี้ไม่ใช่ dropdown แบบ <select>' };
+    } catch (err) {
+      return { error: err.message.split('\n')[0] };
+    }
   }
 
   // ถ่าย snapshot ของหน้าปัจจุบัน แล้วเรียก Gemini นอกคิวข้อความ เพื่อไม่ให้หน้าจอค้างระหว่างรอ

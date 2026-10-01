@@ -74,3 +74,35 @@ test('พิมพ์ต่อเนื่องใน editor ไม่หลุ
   await studio.saveEditor();
   await expect(studio.stepTexts.nth(4)).toContainText('ข้อความใหม่ทั้งหมด');
 });
+
+test('dropdown: เลือกจากรายการตัวเลือกจริงบนหน้าเว็บ ไม่ต้องรู้ value', async ({ studio, page, demo }) => {
+  await expect(page.locator('#url')).toHaveValue(DEMO_URL);
+  const editor = await studio.addStep('selectOption');
+  await expect(editor).toContainText('เลือก dropdown จากหน้าเว็บก่อน');
+  await editor.getByRole('button', { name: 'เลือกจากหน้าเว็บ' }).click();
+  await studio.clickAt(demo.role.x, demo.role.y);
+
+  const options = editor.getByLabel('ตัวเลือก');
+  await expect(options.locator('option:not([disabled])')).toHaveText(['Tester', 'Developer', 'Project Manager']);
+  await options.selectOption({ label: 'Project Manager' });
+  await expect(editor).toContainText('ค่าที่ระบบใช้: pm');
+  await studio.saveEditor();
+  await expect(studio.stepTexts.last()).toHaveText('เลือก dropdown "บทบาท" "Project Manager"');
+  expect(await studio.exportCode()).toContain(".selectOption('pm');");
+});
+
+test('dropdown: ถ้าไม่อยู่ในหน้าที่เปิด พิมพ์ชื่อที่เห็นได้และรันผ่าน', async ({ studio, page }) => {
+  await studio.recordLogin({ role: 'Developer' });
+  // ไปหน้าต้อนรับ (ไม่มี dropdown) แล้วแก้ step เลือกบทบาท
+  await expect(page.locator('#url')).toHaveValue(/#welcome$/);
+  const editor = await studio.openEditor(3);
+  await expect(editor).toContainText('ไม่พบ dropdown นี้ในหน้าที่เปิดอยู่');
+  await editor.getByLabel('ตัวเลือก').fill('Project Manager');
+  await studio.saveEditor();
+  await expect(studio.stepTexts.nth(3)).toHaveText('เลือก dropdown "บทบาท" "Project Manager"');
+  // ตรวจข้อความต้อนรับใหม่ให้ตรงกับบทบาทที่เลือก
+  const assertEditor = await studio.openEditor(5);
+  await assertEditor.getByLabel('ต้องมีข้อความ').fill('(Project Manager)');
+  await studio.saveEditor();
+  expect(await studio.run()).toContain('ผ่านทุก step');
+});

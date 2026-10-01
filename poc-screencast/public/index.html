@@ -532,8 +532,17 @@
             editing.draft.fingerprint = msg.fingerprint;
             if (editing.draft.action === 'assertText' && !editing.draft.expected) editing.draft.expected = msg.text;
             editing.match = { kind: 'good', text: 'เลือก element แล้ว' };
+            editing.options = undefined;
             render();
             send({ type: 'testLocator', locator: msg.locator });
+            loadSelectOptions();
+          }
+          break;
+        case 'selectOptions':
+          if (editing) {
+            editing.options = msg.options ?? null;
+            editing.optionsError = msg.error ?? null;
+            render();
           }
           break;
         case 'locatorTest':
@@ -932,6 +941,15 @@
       editing = { id, draft: structuredClone(draft), secretValue: '', match: null, error: null, saving: false };
       render();
       if (draft.locator) send({ type: 'testLocator', locator: draft.locator });
+      loadSelectOptions();
+    }
+
+    // dropdown: ดึงรายการตัวเลือกจากหน้าเว็บที่เปิดอยู่ ผู้ใช้จะได้เลือกจากชื่อที่เห็น ไม่ต้องรู้ value
+    function loadSelectOptions() {
+      if (editing?.draft.action !== 'selectOption' || !editing.draft.locator) return;
+      editing.options = 'loading';
+      editing.optionsError = null;
+      send({ type: 'selectOptions', locator: editing.draft.locator });
     }
 
     function stopEdit() {
@@ -966,7 +984,9 @@
             if (!next.locator) delete d.locator;
             for (const f of Object.keys(next.fields ?? {})) d[f] ??= '';
             if (d.action !== 'fill') delete d.secret;
+            editing.options = undefined;
             render();
+            loadSelectOptions();
           },
         }, actionOptions(d.action))),
       ];
@@ -989,6 +1009,7 @@
             delete d.fallbacks;
             delete d.fingerprint;
             editing.match = null;
+            editing.options = undefined;
             render();
           },
         },
@@ -1015,6 +1036,10 @@
 
       for (const [field, label] of Object.entries(spec.fields ?? {})) {
         const note = spec.hints?.[field];
+        if (d.action === 'selectOption' && field === 'value') {
+          parts.push(renderOptionField(d, label));
+          continue;
+        }
         if (field === 'testId') {
           const others = testList.filter((t) => t.id !== state.testId);
           parts.push(group(label, el('select', {
@@ -1059,6 +1084,55 @@
           },
         })));
       return el('li', { className: 'editor' }, ...parts);
+    }
+
+    // ช่อง "ตัวเลือก" ของ step dropdown: เป็นรายการจากหน้าเว็บถ้าโหลดได้ ไม่งั้นพิมพ์เอง
+    function renderOptionField(d, label) {
+      const group = (control, note) =>
+        el('div', { className: 'form-group' }, el('label', { className: 'lbl', textContent: label }), control, note ? el('span', { className: 'note', textContent: note }) : null);
+      const opts = Array.isArray(editing.options) ? editing.options : null;
+      if (opts) {
+        const current = opts.findIndex((o) => o.value === d.value);
+        const select = el('select', {
+          className: 'form-select',
+          ariaLabel: label,
+          onchange: (e) => {
+            const o = opts[Number(e.target.value)];
+            if (!o) return;
+            d.value = o.value;
+            d.label = o.label;
+            render();
+          },
+        },
+          !d.value ? el('option', { value: '', textContent: '— เลือกตัวเลือก —', selected: true, disabled: true }) : null,
+          d.value && current < 0 ? el('option', { value: '-1', textContent: `${d.label ?? d.value} (ไม่พบในหน้านี้)`, selected: true }) : null,
+          opts.map((o, i) => el('option', { value: String(i), textContent: o.label || '(ว่าง)', selected: i === current })));
+        const chosen = opts[current];
+        const note = chosen && chosen.value !== chosen.label
+          ? `รายการจาก dropdown บนหน้าเว็บ · ค่าที่ระบบใช้: ${chosen.value}`
+          : 'รายการจาก dropdown บนหน้าเว็บ';
+        return group(select, note);
+      }
+      const loading = editing.options === 'loading';
+      const control = el('div', { className: 'row' },
+        el('input', {
+          className: 'form-control',
+          ariaLabel: label,
+          value: d.label ?? d.value ?? '',
+          placeholder: 'ชื่อตัวเลือกที่เห็นบนหน้าเว็บ',
+          oninput: (e) => { d.value = e.target.value; delete d.label; },
+        }),
+        el('button', {
+          className: 'btn btn-sm',
+          disabled: !d.locator || loading,
+          onclick: loadSelectOptions,
+        }, icon(loading ? 'sync' : 'list-ordered', loading ? 'spin' : ''), ' โหลดตัวเลือก'));
+      const note = loading
+        ? 'กำลังโหลดตัวเลือกจากหน้าเว็บ…'
+        : !d.locator
+          ? 'เลือก dropdown จากหน้าเว็บก่อน แล้วระบบจะแสดงรายการตัวเลือกให้'
+          : `${editing.optionsError ? `${editing.optionsError} — ` : ''}พิมพ์ชื่อที่เห็นบนหน้าเว็บได้เลย (ระบบจับคู่ได้ทั้งชื่อและ value) หรือเปิดหน้าที่มี dropdown นี้แล้วกด "โหลดตัวเลือก"`;
+      return group(control, note);
     }
 
     $('addStep').onclick = () => send({ type: 'insertStep', action: $('newAction').value });

@@ -21,7 +21,7 @@ export const ACTIONS = {
     fields: { key: 'ปุ่ม' },
     hints: { key: 'เช่น Enter, Tab, Escape, Control+a' },
   },
-  selectOption: { label: 'เลือกจาก dropdown', group: 'action', locator: 'required', fields: { value: 'ค่าที่เลือก (value)' } },
+  selectOption: { label: 'เลือกจาก dropdown', group: 'action', locator: 'required', fields: { value: 'ตัวเลือก' } },
   check: { label: 'ติ๊ก checkbox', group: 'action', locator: 'required' },
   uncheck: { label: 'เอาติ๊กออก', group: 'action', locator: 'required' },
   useTest: {
