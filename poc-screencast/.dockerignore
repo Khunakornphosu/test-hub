@@ -1,0 +1,9 @@
+# ห้ามอัปโหลดค่าลับและข้อมูลในเครื่องขึ้น Vercel
+.env
+data/
+secret.key
+node_modules/
+test-results/
+playwright-report/
+tests/
+playwright.config.js

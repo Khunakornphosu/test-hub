@@ -70,3 +70,14 @@ test('Export เป็นโค้ด Playwright ที่รันนอกร�
   });
   expect(output).toContain('1 passed');
 });
+
+test('การเชื่อมต่อหลุดแล้วต่อใหม่เอง step ยังอยู่และรันต่อได้', async ({ studio, page }) => {
+  await studio.recordLogin();
+  // จำลองการถูกตัดการเชื่อมต่อ (เช่น ครบเวลาสูงสุดของ function บน Vercel)
+  await page.evaluate(() => ws.close());
+  await expect(page.locator('#conn')).toHaveText('กำลังเชื่อมต่อใหม่…');
+  await expect(page.locator('#conn')).toHaveText('เชื่อมต่อแล้ว');
+  await expect(page.locator('.Toast--warning')).toContainText('เชื่อมต่อใหม่แล้ว');
+  await expect(studio.steps).toHaveCount(5);
+  expect(await studio.run()).toContain('ผ่านทุก step');
+});

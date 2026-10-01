@@ -4,3 +4,4 @@ data/
 secret.key
 test-results/
 playwright-report/
+.vercel/

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { exportTest, fingerprintScore, isComplete, sanitizeStep, stepToCode } from '../steps.js';
 import { generateSteps, redactSnapshot } from '../ai.js';
-import { createCipher, createUrlGuard } from '../security.js';
+import { createAccessControl, createCipher, createUrlGuard } from '../security.js';
 
 test.describe('sanitizeStep', () => {
   test('ปฏิเสธประเภท step ที่ไม่รู้จัก', () => {
@@ -193,4 +193,26 @@ test('ตัวแปรลับ: เข้ารหัสแล้วถอด
     if (env !== undefined) process.env.SECRET_KEY = env;
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('session แบบ cookie ที่เซ็นไว้: ใช้ข้าม instance ได้ ปลอมไม่ได้ และหมดผลเมื่อเปลี่ยนรหัสผ่าน', () => {
+  const env = { APP_PASSWORD: 'pw', SECRET_KEY: 'k', PUBLIC_HOSTS: '*.vercel.app' };
+  const login = (ac) => {
+    const res = { headers: {}, setHeader(k, v) { this.headers[k] = v; }, redirect() {} };
+    ac.login({ body: { password: 'pw' }, socket: {}, secure: true }, res);
+    return res.headers['Set-Cookie'];
+  };
+  const upgrade = (ac, host, cookie) => ac.checkUpgrade({ headers: { host, origin: `https://${host}`, cookie } });
+
+  const setCookie = login(createAccessControl({ port: 3000, env }));
+  expect(setCookie).toMatch(/^ts_session=\d+\.[a-f0-9]{64}; HttpOnly; SameSite=Strict; Path=\/; Max-Age=\d+; Secure$/);
+  const cookie = setCookie.split(';')[0];
+
+  // instance อื่นที่ตั้งค่าเหมือนกันยอมรับ cookie เดียวกัน
+  const other = createAccessControl({ port: 3000, env });
+  expect(upgrade(other, 'test-studio.vercel.app', cookie)).toBeNull();
+  expect(upgrade(other, 'test-studio.vercel.app', cookie.replace(/.$/, (c) => (c === 'a' ? 'b' : 'a')))).toBe('Unauthorized');
+  expect(upgrade(other, 'evil.example', cookie)).toBe('Invalid Host header');
+  const changed = createAccessControl({ port: 3000, env: { ...env, APP_PASSWORD: 'new' } });
+  expect(upgrade(changed, 'test-studio.vercel.app', cookie)).toBe('Unauthorized');
 });

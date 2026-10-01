@@ -213,15 +213,24 @@ export const isLoopbackBind = (host) => LOOPBACK_BIND.has(host);
  */
 export function createAccessControl({ port, env = process.env }) {
   const password = env.APP_PASSWORD || null;
-  const hosts = new Set([`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]);
-  for (const h of (env.PUBLIC_HOSTS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)) hosts.add(h);
+  // PUBLIC_HOSTS: ชื่อที่ใช้เปิดระบบจากภายนอก เช่น test-studio.lan:3000 หรือ *.vercel.app (ไม่มีพอร์ต = ตรงกับ Host ที่ไม่มีพอร์ต)
+  const hosts = [`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`];
+  hosts.push(...(env.PUBLIC_HOSTS ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean));
 
-  const sessions = new Map(); // token -> expires
   const SESSION_MS = 12 * 60 * 60 * 1000;
   const failures = new Map(); // ip -> [timestamps]
   const COOKIE = 'ts_session';
+  // session เป็น cookie ที่เซ็นด้วย HMAC (ไม่เก็บในหน่วยความจำ) ใช้ได้แม้ request ไปคนละ instance เช่นบน Vercel
+  // key ผูกกับ APP_PASSWORD: เปลี่ยนรหัสผ่านแล้ว session เดิมใช้ไม่ได้ทันที
+  const sessionKey = crypto
+    .createHash('sha256')
+    .update(`session:${env.SECRET_KEY ?? crypto.randomBytes(32).toString('hex')}:${password ?? ''}`)
+    .digest();
 
-  const hostAllowed = (req) => hosts.has(String(req.headers.host ?? '').toLowerCase());
+  const hostAllowed = (req) => {
+    const host = String(req.headers.host ?? '').toLowerCase();
+    return hosts.some((h) => (h.startsWith('*.') ? host.endsWith(h.slice(1)) : host === h));
+  };
   const originAllowed = (req) => {
     const origin = req.headers.origin;
     if (!origin) return false;
@@ -232,16 +241,15 @@ export function createAccessControl({ port, env = process.env }) {
     }
   };
 
+  const sign = (expires) => crypto.createHmac('sha256', sessionKey).update(String(expires)).digest('hex');
+
   function sessionOf(req) {
-    const m = String(req.headers.cookie ?? '').match(new RegExp(`(?:^|;\\s*)${COOKIE}=([a-f0-9]{64})`));
-    const token = m?.[1];
-    const expires = token && sessions.get(token);
-    if (!expires) return null;
-    if (expires < Date.now()) {
-      sessions.delete(token);
-      return null;
-    }
-    return token;
+    const m = String(req.headers.cookie ?? '').match(new RegExp(`(?:^|;\\s*)${COOKIE}=(\\d+)\\.([a-f0-9]{64})`));
+    if (!m) return null;
+    const [, expires, signature] = m;
+    const expected = Buffer.from(sign(expires), 'hex');
+    if (!crypto.timingSafeEqual(Buffer.from(signature, 'hex'), expected)) return null;
+    return Number(expires) > Date.now() ? m[0] : null;
   }
   const authenticated = (req) => !password || !!sessionOf(req);
 
@@ -265,14 +273,14 @@ export function createAccessControl({ port, env = process.env }) {
   }
 
   function login(req, res) {
-    const ip = req.socket.remoteAddress;
+    const ip = req.ip ?? req.socket.remoteAddress;
     if (tooManyFailures(ip)) return res.redirect('/login?error=locked');
     if (!passwordMatches(req.body?.password)) {
       failures.get(ip).push(Date.now());
       return res.redirect('/login?error=1');
     }
-    const token = crypto.randomBytes(32).toString('hex');
-    sessions.set(token, Date.now() + SESSION_MS);
+    const expires = Date.now() + SESSION_MS;
+    const token = `${expires}.${sign(expires)}`;
     res.setHeader(
       'Set-Cookie',
       `${COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_MS / 1000}${req.secure ? '; Secure' : ''}`
@@ -280,9 +288,8 @@ export function createAccessControl({ port, env = process.env }) {
     res.redirect('/');
   }
 
+  // session เป็น cookie ที่เซ็นไว้ จึงออกจากระบบด้วยการลบ cookie ในเบราว์เซอร์
   function logout(req, res) {
-    const token = sessionOf(req);
-    if (token) sessions.delete(token);
     res.setHeader('Set-Cookie', `${COOKIE}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
     res.json({ ok: true });
   }

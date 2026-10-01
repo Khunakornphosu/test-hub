@@ -446,8 +446,8 @@
     const urlInput = $('url');
     urlInput.value = `${location.origin}/demo-login.html`;
 
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
-    const send = (msg) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
+    let ws = null; // สร้างใน connect() ท้ายสคริปต์
+    const send = (msg) => ws?.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
 
     let ACTIONS = {};
     let LOCATOR_TYPES = {};
@@ -476,27 +476,50 @@
     // ---------- เฟรมและการเชื่อมต่อ ----------
     const img = new Image();
     img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-    function setConn(on) {
+    function setConn(on, text) {
       $('conn').classList.toggle('on', on);
-      $('conn').textContent = on ? 'เชื่อมต่อแล้ว' : 'ไม่ได้เชื่อมต่อ';
+      $('conn').textContent = text ?? (on ? 'เชื่อมต่อแล้ว' : 'ไม่ได้เชื่อมต่อ');
     }
 
-    ws.onopen = async () => {
-      setConn(true);
-      send({ type: 'navigate', url: urlInput.value });
-      await loadProjects();
-    };
-    ws.onclose = async () => {
-      setConn(false);
-      // ถูกปฏิเสธเพราะ session หมดอายุ: api() จะพาไปหน้าล็อกอิน
-      await api('/api/auth').catch(() => {});
-    };
+    // การเชื่อมต่อหลุดได้ (เช่น บน Vercel ถูกตัดเมื่อครบเวลาสูงสุดของ function) จึงต่อใหม่อัตโนมัติ
+    // ฝั่ง server เปิดเบราว์เซอร์ใหม่ทุกครั้งที่ต่อ จึงเปิดหน้าเว็บและเทสเคสเดิมให้อีกครั้ง (step เก็บในฐานข้อมูลแล้ว ไม่หาย)
+    let everConnected = false;
+    let reconnectDelay = 1000;
+    function connect() {
+      ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+      ws.onmessage = handleMessage;
+      ws.onopen = async () => {
+        reconnectDelay = 1000;
+        setConn(true);
+        send({ type: 'navigate', url: urlInput.value });
+        if (!everConnected) {
+          everConnected = true;
+          await loadProjects();
+        } else if (state.testId) {
+          editing = null;
+          runStatus = {};
+          lastRun = null;
+          send({ type: 'openTest', id: state.testId });
+          toast('เชื่อมต่อใหม่แล้ว — หน้าเว็บถูกเปิดใหม่ step ที่บันทึกไว้ยังอยู่ครบ', 'warning');
+        }
+      };
+      ws.onclose = async () => {
+        setConn(false, 'กำลังเชื่อมต่อใหม่…');
+        state = { ...state, recording: false, running: false, mode: 'interact' };
+        runProgress = null;
+        render();
+        // ถูกปฏิเสธเพราะ session หมดอายุ: api() จะพาไปหน้าล็อกอิน
+        await api('/api/auth').catch(() => {});
+        setTimeout(connect, reconnectDelay);
+        reconnectDelay = Math.min(reconnectDelay * 2, 30000);
+      };
+    }
     api('/api/auth').then(({ enabled }) => { $('logout').hidden = !enabled; }).catch(() => {});
     $('logout').onclick = async () => {
       await fetch('/logout', { method: 'POST' });
       location.href = '/login';
     };
-    ws.onmessage = (ev) => {
+    function handleMessage(ev) {
       const msg = JSON.parse(ev.data);
       switch (msg.type) {
         case 'ready':
@@ -1450,6 +1473,7 @@
     ime.addEventListener('input', () => { if (!composing) flushText(); });
 
     render();
+    connect();
   </script>
 </body>
 </html>

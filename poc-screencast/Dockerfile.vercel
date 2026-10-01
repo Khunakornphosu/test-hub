@@ -1,0 +1,28 @@
+# Image สำหรับ deploy บน Vercel Functions (container) — ใช้กับ docker ที่อื่นได้ด้วย
+FROM node:24-bookworm-slim
+
+ENV NODE_ENV=production \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    # ฟังทุก interface ใน container (ต้องตั้ง APP_PASSWORD ไม่งั้น server ไม่ยอมเริ่ม)
+    HOST=0.0.0.0 \
+    # Vercel ส่ง traffic เข้าพอร์ต 80 เป็นค่าเริ่มต้น
+    PORT=80 \
+    # อยู่หลัง proxy ของ Vercel: เชื่อ X-Forwarded-* (https, IP ผู้ใช้)
+    TRUST_PROXY=true \
+    # Vercel ไม่มีดิสก์ถาวร: ฐานข้อมูลอยู่ใน /tmp และหายเมื่อ instance ถูกปิด (ใช้ทดลองเท่านั้น)
+    DB_PATH=/tmp/test-studio.db \
+    # ค่าตั้งทั้งหมดมาจาก Environment Variables ของ Vercel ไม่ใช่ไฟล์ .env
+    ENV_FILE=none
+
+WORKDIR /app
+COPY package.json package-lock.json ./
+# ติดตั้งเฉพาะ dependency ที่ใช้ตอนรัน + Chromium แบบ headless และ library/ฟอนต์ที่ต้องใช้
+RUN npm ci --omit=dev \
+ && npx playwright install --with-deps --only-shell chromium \
+ && rm -rf /root/.npm /root/.cache
+
+COPY *.js ./
+COPY public ./public
+COPY private ./private
+
+CMD ["node", "server.js"]

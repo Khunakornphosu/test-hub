@@ -51,6 +51,8 @@ const RECORDED_KEYS = new Set(['Enter', 'Escape']);
 
 const app = express();
 app.disable('x-powered-by');
+// อยู่หลัง reverse proxy (เช่น Vercel): ใช้ X-Forwarded-* เพื่อรู้ว่าเป็น https (cookie Secure) และ IP จริงของผู้ใช้
+if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', true);
 app.use(access.middleware);
 app.use(express.json());
 app.get('/login', (req, res) => res.sendFile('login.html', { root: 'private' }));
@@ -151,7 +153,8 @@ const wss = new WebSocketServer({
 // ทุก request ของเบราว์เซอร์ผ่าน proxy ที่กันการเข้าถึงเครือข่ายภายใน (SSRF)
 const urlGuard = createUrlGuard({ appPort: PORT });
 const guardProxy = await startGuardProxy(urlGuard);
-const browser = await chromium.launch({ headless: true, ...guardProxy.launchOptions });
+// --disable-dev-shm-usage: /dev/shm ใน container มักเล็กเกินไปจน Chromium ล่ม
+const browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'], ...guardProxy.launchOptions });
 
 // ตรวจก่อนเปิด URL เพื่อแจ้งเหตุผลเป็นภาษาไทย (proxy ยังกันซ้ำอีกชั้น)
 async function assertUrlAllowed(url) {
@@ -332,6 +335,8 @@ wss.on('connection', (ws) => {
   }
 
   async function handle(msg) {
+    // ผู้ใช้ปิดหน้าไปแล้ว: ทิ้งข้อความที่ค้างในคิว ไม่งั้นจะเกิด step ที่ผู้ใช้ไม่เห็น
+    if (ws.readyState !== ws.OPEN) return;
     // ระหว่างรันเทส ไม่รับ input จากผู้ใช้ เพื่อไม่ให้รบกวนผล
     if (running && msg.type !== 'export') return;
 
@@ -754,8 +759,11 @@ server.listen(PORT, HOST, () => {
   console.log(`Test Studio PoC running at http://localhost:${PORT}`);
 });
 
-process.on('SIGINT', async () => {
-  await browser.close();
-  guardProxy.close();
-  process.exit(0);
-});
+// SIGTERM: platform อย่าง Vercel/Docker สั่งปิด instance (มีเวลาเก็บกวาดประมาณ 30 วินาที)
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  process.on(signal, async () => {
+    await browser.close().catch(() => {});
+    guardProxy.close();
+    process.exit(0);
+  });
+}
