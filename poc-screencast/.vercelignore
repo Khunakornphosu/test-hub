@@ -1,5 +1,6 @@
 # ห้ามอัปโหลดค่าลับและข้อมูลในเครื่องขึ้น Vercel
-.env
+.env*
+!.env.example
 data/
 secret.key
 node_modules/

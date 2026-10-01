@@ -5,3 +5,6 @@ secret.key
 test-results/
 playwright-report/
 .vercel/
+.vercel
+.env*
+!.env.example

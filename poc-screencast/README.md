@@ -53,6 +53,30 @@ npm start
 - ผู้ใช้ทุกคนใช้รหัสผ่านเดียวกัน ยังไม่มีบัญชีรายคนและสิทธิ์ (อยู่ใน Phase 3)
 - เบราว์เซอร์ทดสอบรันใน process เดียวกับ server ถ้าใช้จริงกับหลายคน ควรแยกเป็น container
 
+## Deploy บน Vercel (ทดลอง)
+
+ใช้ `Dockerfile.vercel` (Vercel Functions แบบ container + WebSocket ซึ่งทั้งสองอย่างยังเป็น beta)
+
+```bash
+npx vercel link --project test-studio     # ครั้งแรก
+npx vercel env add APP_PASSWORD production # ตั้งค่าที่จำเป็น (ดูรายการด้านล่าง)
+npx vercel deploy --prod
+```
+
+**Environment variables ที่ต้องมี:**
+- `APP_PASSWORD`: จำเป็น เพราะเว็บเปิดบนอินเทอร์เน็ต
+- `SECRET_KEY`: ใช้เข้ารหัสตัวแปรลับ
+- `PUBLIC_HOSTS=*.vercel.app`
+- `GEMINI_API_KEY` และ `GEMINI_MODEL`: ถ้าต้องการใช้ AI
+
+`.vercelignore` กันไม่ให้ `.env*`, `data/` และ `secret.key` ถูกอัปโหลด
+
+**ข้อจำกัดของรอบทดลอง (ต้องแก้ก่อนใช้จริง):**
+- **ข้อมูลไม่ถาวรและไม่ตรงกันระหว่าง instance:** ฐานข้อมูลอยู่ใน `/tmp` ของแต่ละ instance จึงหายเมื่อ instance ถูกปิด (ไม่มีคนใช้ 5 นาที) และถ้า Vercel เปิดหลาย instance ข้อมูลจะไม่ตรงกัน (เห็นได้จริงตอนทดสอบ) → ต้องย้ายไป Postgres
+- **การเชื่อมต่อหลุดตามเวลาสูงสุดของ function:** Hobby 5 นาที, Pro สูงสุด 13 นาที หน้าเว็บจะต่อใหม่และเปิดเทสเดิมให้อัตโนมัติ
+- **ทดสอบเว็บที่อยู่ในเครือข่ายภายในบริษัทไม่ได้**
+- แผน Hobby ใช้ได้เฉพาะงานส่วนตัวที่ไม่ใช่เชิงพาณิชย์
+
 ## ชุดเทสของระบบ
 
 ```bash
