@@ -259,6 +259,7 @@
             <div class="SelectMenu-list" role="menu">
               <button class="SelectMenu-item" role="menuitem" id="secretsBtn"><span data-icon="lock"></span><span>ตัวแปรลับ<span class="item-desc">รหัสผ่านและค่าที่ไม่ควรเก็บใน step</span></span></button>
               <button class="SelectMenu-item" role="menuitem" id="newProject"><span data-icon="project"></span><span>สร้างโปรเจกต์ใหม่</span></button>
+              <button class="SelectMenu-item" role="menuitem" id="logout" hidden><span data-icon="sign-out"></span><span>ออกจากระบบ</span></button>
             </div>
           </div>
         </div>
@@ -420,6 +421,10 @@
         headers: { 'Content-Type': 'application/json' },
         body: opts.body && JSON.stringify(opts.body),
       });
+      if (res.status === 401) {
+        location.href = '/login';
+        throw new Error('กรุณาเข้าสู่ระบบ');
+      }
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || res.statusText);
       return data;
@@ -481,7 +486,16 @@
       send({ type: 'navigate', url: urlInput.value });
       await loadProjects();
     };
-    ws.onclose = () => setConn(false);
+    ws.onclose = async () => {
+      setConn(false);
+      // ถูกปฏิเสธเพราะ session หมดอายุ: api() จะพาไปหน้าล็อกอิน
+      await api('/api/auth').catch(() => {});
+    };
+    api('/api/auth').then(({ enabled }) => { $('logout').hidden = !enabled; }).catch(() => {});
+    $('logout').onclick = async () => {
+      await fetch('/logout', { method: 'POST' });
+      location.href = '/login';
+    };
     ws.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
       switch (msg.type) {
@@ -605,6 +619,15 @@
 
     // ---------- โปรเจกต์และเทสเคส ----------
     async function loadProjects(selectId) {
+      // ลิงก์ตรงไปที่เทส: /?test=ID
+      const linked = Number(new URLSearchParams(location.search).get('test'));
+      if (linked && selectId == null) {
+        const t = await api(`/api/tests/${linked}`).catch(() => null);
+        if (t) {
+          selectId = t.project_id;
+          store.set('testId', t.id);
+        }
+      }
       const projects = await api('/api/projects');
       $('project').replaceChildren(...projects.map((p) => el('option', { value: p.id, textContent: p.name })));
       const wanted = selectId ?? Number(store.get('projectId'));
@@ -791,8 +814,23 @@
         return;
       }
 
+      // จำช่องที่กำลังพิมพ์ใน Step Editor ไว้ เพราะ render ใหม่ทั้งรายการ (เช่น ตอนผลทดสอบ locator กลับมา)
+      // ไม่งั้น focus จะหลุด และตัวอักษรที่พิมพ์ต่อจะไปเข้าหน้าเว็บแทน
+      // สถานะเปิด/ปิดส่วน "ขั้นสูง" อ่านจาก DOM ตรงๆ (event toggle มาช้ากว่าการ render ครั้งถัดไปได้)
+      const advanced = list.querySelector('.editor details');
+      if (editing && advanced) editing.advancedOpen = advanced.open;
+      const active = document.activeElement;
+      const focusKey = active?.closest?.('#steps .editor') ? active.getAttribute('aria-label') : null;
+      const selection = focusKey && typeof active.selectionStart === 'number' ? [active.selectionStart, active.selectionEnd] : null;
+
       const isNew = (id) => knownIds && !knownIds.has(id);
       list.replaceChildren(...steps.map((s, i) => (editing?.id === s.id ? renderEditor(s, i) : renderStep(s, i, isNew(s.id)))));
+
+      if (focusKey) {
+        const next = [...list.querySelectorAll('.editor [aria-label]')].find((n) => n.getAttribute('aria-label') === focusKey);
+        next?.focus({ preventScroll: true });
+        if (next && selection) next.setSelectionRange?.(...selection);
+      }
       knownIds = new Set(steps.map((s) => s.id));
       const focus = list.querySelector('.running, .editor') ?? [...list.querySelectorAll('.is-new')].at(-1);
       focus?.scrollIntoView({ block: 'nearest' });
@@ -968,7 +1006,8 @@
             m ? el('div', { className: `match ${m.kind}` }, icon(m.kind === 'good' ? 'check' : 'alert'), m.text) : null,
             el('div', { className: 'row' }, pickBtn,
               loc ? el('button', { className: 'btn btn-sm', onclick: () => send({ type: 'testLocator', locator: d.locator }) }, icon('beaker'), ' ทดสอบ') : null),
-            el('details', {},
+            // คงสถานะเปิด/ปิดไว้ข้าม render (ดู render()) ไม่งั้นจะพับเองหลังเลือกประเภท
+            el('details', { open: !!editing.advancedOpen },
               el('summary', { textContent: 'แก้ locator เอง (ขั้นสูง)' }),
               el('div', { className: 'adv' }, typeSelect, ...advInputs))
           )));

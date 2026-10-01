@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui"
   },
   "dependencies": {
     "@primer/css": "^22.3.2",
@@ -12,5 +14,8 @@
     "express": "^5.2.1",
     "playwright": "^1.63.0",
     "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
   }
 }

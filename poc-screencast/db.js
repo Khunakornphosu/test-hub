@@ -1,9 +1,13 @@
 // เก็บโปรเจกต์ เทสเคส ตัวแปรลับ และประวัติการรันใน SQLite (ไฟล์เดียว ไม่ต้องตั้ง server)
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
+import path from 'node:path';
+import { createCipher } from './security.js';
 
-mkdirSync('data', { recursive: true });
-const db = new DatabaseSync(process.env.DB_PATH || 'data/test-studio.db');
+const DB_PATH = process.env.DB_PATH || 'data/test-studio.db';
+mkdirSync(path.dirname(DB_PATH), { recursive: true });
+const db = new DatabaseSync(DB_PATH);
+const cipher = createCipher(DB_PATH === ':memory:' ? null : path.dirname(DB_PATH));
 
 db.exec(`
   PRAGMA foreign_keys = ON;
@@ -47,6 +51,17 @@ if (!db.prepare('SELECT 1 FROM projects LIMIT 1').get()) {
 
 const plain = (row) => (row ? { ...row } : row);
 
+// เข้ารหัสตัวแปรลับที่ยังเป็นข้อความธรรมดา (บันทึกไว้ก่อนมีการเข้ารหัส)
+for (const row of db.prepare('SELECT project_id, name, value FROM secrets').all()) {
+  if (!cipher.isEncrypted(row.value)) {
+    db.prepare('UPDATE secrets SET value = ? WHERE project_id = ? AND name = ?').run(
+      cipher.encrypt(row.value),
+      row.project_id,
+      row.name
+    );
+  }
+}
+
 export const projects = {
   list: () => db.prepare('SELECT id, name FROM projects ORDER BY id').all().map(plain),
   create: (name) => Number(db.prepare('INSERT INTO projects (name) VALUES (?)').run(name).lastInsertRowid),
@@ -78,16 +93,24 @@ export const tests = {
 export const secrets = {
   names: (projectId) =>
     db.prepare('SELECT name FROM secrets WHERE project_id = ? ORDER BY name').all(projectId).map((r) => r.name),
-  values: (projectId) =>
-    Object.fromEntries(
-      db.prepare('SELECT name, value FROM secrets WHERE project_id = ?').all(projectId).map((r) => [r.name, r.value])
-    ),
+  values: (projectId) => {
+    const out = {};
+    for (const r of db.prepare('SELECT name, value FROM secrets WHERE project_id = ?').all(projectId)) {
+      try {
+        out[r.name] = cipher.decrypt(r.value);
+      } catch {
+        // ถอดรหัสไม่ได้ (เช่น เปลี่ยน SECRET_KEY) ถือว่ายังไม่ได้ตั้งค่า ผู้ใช้ต้องตั้งใหม่
+        console.warn(`[security] ถอดรหัสตัวแปรลับ ${r.name} ไม่ได้ — SECRET_KEY อาจถูกเปลี่ยน`);
+      }
+    }
+    return out;
+  },
   set: (projectId, name, value) =>
     db
       .prepare(
         'INSERT INTO secrets (project_id, name, value) VALUES (?, ?, ?) ON CONFLICT (project_id, name) DO UPDATE SET value = excluded.value'
       )
-      .run(projectId, name, value),
+      .run(projectId, name, cipher.encrypt(value)),
   remove: (projectId, name) => db.prepare('DELETE FROM secrets WHERE project_id = ? AND name = ?').run(projectId, name),
 };
 

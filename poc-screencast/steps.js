@@ -407,7 +407,8 @@ async function poll(check, message) {
 
 // รัน step เดียว คืนค่า { healed } ถ้าต้องใช้ locator สำรอง
 // step useTest ต้องให้ผู้เรียกขยายเอง เพราะต้องโหลดเทสอื่นจากฐานข้อมูล
-export async function runStep(page, step, { secrets = {} } = {}) {
+// checkUrl(url): ตรวจ URL ก่อน goto (โยน error พร้อมเหตุผลถ้าไม่อนุญาต)
+export async function runStep(page, step, { secrets = {}, checkUrl } = {}) {
   if (!isComplete(step)) {
     throw new Error(step.action === 'useTest' ? 'step นี้ยังไม่ได้เลือกเทส' : 'step นี้ยังไม่ได้เลือก element');
   }
@@ -415,6 +416,7 @@ export async function runStep(page, step, { secrets = {} } = {}) {
   const opts = { timeout: STEP_TIMEOUT };
   switch (step.action) {
     case 'goto':
+      if (checkUrl) await checkUrl(step.value);
       await page.goto(step.value, { waitUntil: 'domcontentloaded' });
       break;
     case 'click':

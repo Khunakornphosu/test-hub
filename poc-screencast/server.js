@@ -2,6 +2,7 @@
 // ส่ง input (เมาส์/คีย์บอร์ด/ภาษาไทย) จาก canvas กลับไปทำบนหน้าจริง
 // บันทึกการกระทำเป็น step JSON -> แก้ไข / รันซ้ำ / Export เป็นโค้ด Playwright
 // โปรเจกต์ เทสเคส ตัวแปรลับ และประวัติการรันเก็บใน SQLite
+import './env.js';
 import express from 'express';
 import { createServer } from 'node:http';
 import { WebSocketServer } from 'ws';
@@ -33,22 +34,29 @@ import {
 import * as db from './db.js';
 import { aiStatus, generateSteps, redactSnapshot } from './ai.js';
 import octicons from '@primer/octicons';
-
-// ค่าตั้งค่าลับ (เช่น GEMINI_API_KEY) อยู่ในไฟล์ .env ซึ่งไม่ถูกเก็บใน git
-try {
-  process.loadEnvFile();
-} catch {
-  // ไม่มีไฟล์ .env ก็ทำงานได้ เพียงแต่ปิดฟีเจอร์ AI
-}
+import { createAccessControl, createUrlGuard, isLoopbackBind, startGuardProxy } from './security.js';
 
 const PORT = Number(process.env.PORT) || 3000;
+// ค่าเริ่มต้นเปิดให้เข้าได้เฉพาะเครื่องนี้ ถ้าจะให้เครื่องอื่นเข้า (HOST=0.0.0.0) ต้องตั้ง APP_PASSWORD
+const HOST = process.env.HOST || '127.0.0.1';
+const access = createAccessControl({ port: PORT });
+if (!isLoopbackBind(HOST) && !access.enabled) {
+  console.error(`[security] HOST=${HOST} เปิดให้เครื่องอื่นเข้าถึงได้ กรุณาตั้ง APP_PASSWORD ใน .env ก่อน`);
+  process.exit(1);
+}
 const VIEWPORT = { width: 1280, height: 720 };
 const HIGHLIGHT_COLOR = { interact: '#3b82f6', assertVisible: '#16a34a', assertText: '#16a34a', pick: '#eab308' };
 // ปุ่มที่บันทึกเป็น step press (ปุ่มอื่น เช่น Tab/ลูกศร ไม่จำเป็นต่อการรันซ้ำ)
 const RECORDED_KEYS = new Set(['Enter', 'Escape']);
 
 const app = express();
+app.disable('x-powered-by');
+app.use(access.middleware);
 app.use(express.json());
+app.get('/login', (req, res) => res.sendFile('login.html', { root: 'private' }));
+app.post('/login', express.urlencoded({ extended: false }), access.login);
+app.post('/logout', access.logout);
+app.get('/api/auth', (req, res) => res.json({ enabled: access.enabled }));
 app.use(express.static('public'));
 
 // Design system: GitHub Primer (MIT) — CSS/tokens จาก npm และไอคอน Octicons
@@ -59,7 +67,7 @@ const ICONS = [
   'x-circle-fill', 'skip', 'grabber', 'trash', 'kebab-horizontal', 'download', 'copy', 'lock', 'plus', 'x',
   'arrow-left', 'arrow-right', 'sync', 'history', 'code', 'checklist', 'crosshairs', 'beaker', 'command-palette',
   'single-select', 'checkbox', 'square', 'cursor', 'info', 'alert', 'clock', 'triangle-down', 'file', 'project',
-  'check', 'stop', 'light-bulb', 'list-ordered', 'chevron-down', 'chevron-right', 'stack', 'tools', 'link-external', 'sparkle-fill', 'shield-lock',
+  'check', 'stop', 'light-bulb', 'list-ordered', 'chevron-down', 'chevron-right', 'stack', 'tools', 'link-external', 'sparkle-fill', 'shield-lock', 'sign-out',
 ];
 const iconsJs = `window.ICONS = ${JSON.stringify(Object.fromEntries(ICONS.map((n) => [n, octicons[n].toSVG()])))};`;
 app.get('/icons.js', (req, res) => res.type('js').send(iconsJs));
@@ -83,6 +91,10 @@ app.delete('/api/projects/:id', (req, res) => {
 });
 
 app.get('/api/projects/:id/tests', (req, res) => res.json(db.tests.list(id(req))));
+app.get('/api/tests/:id', (req, res) => {
+  const t = db.tests.get(id(req));
+  t ? res.json({ id: t.id, project_id: t.project_id, name: t.name }) : res.status(404).json({ error: 'ไม่พบเทสเคสนี้' });
+});
 app.post('/api/projects/:id/tests', (req, res) => {
   const name = requireName(req, res);
   if (name) res.json({ id: db.tests.create(id(req), name) });
@@ -125,10 +137,27 @@ app.get('/api/runs/:id/screenshot', (req, res) => {
 });
 
 const server = createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws' });
+const wss = new WebSocketServer({
+  server,
+  path: '/ws',
+  verifyClient: ({ req }, done) => {
+    const error = access.checkUpgrade(req);
+    if (error) done(false, 403, error);
+    else done(true);
+  },
+});
 
 // เปิด browser ครั้งเดียว แล้วแยก context ต่อ 1 การเชื่อมต่อ
-const browser = await chromium.launch({ headless: true });
+// ทุก request ของเบราว์เซอร์ผ่าน proxy ที่กันการเข้าถึงเครือข่ายภายใน (SSRF)
+const urlGuard = createUrlGuard({ appPort: PORT });
+const guardProxy = await startGuardProxy(urlGuard);
+const browser = await chromium.launch({ headless: true, ...guardProxy.launchOptions });
+
+// ตรวจก่อนเปิด URL เพื่อแจ้งเหตุผลเป็นภาษาไทย (proxy ยังกันซ้ำอีกชั้น)
+async function assertUrlAllowed(url) {
+  const verdict = await urlGuard.check(url);
+  if (!verdict.ok) throw new Error(verdict.reason);
+}
 
 wss.on('connection', (ws) => {
   const send = (msg) => ws.readyState === ws.OPEN && ws.send(JSON.stringify(msg));
@@ -322,7 +351,8 @@ wss.on('connection', (ws) => {
       }
 
       case 'navigate': {
-        const url = /^https?:\/\//i.test(msg.url) ? msg.url : `https://${msg.url}`;
+        const url = /^[a-z][a-z0-9+.-]*:/i.test(msg.url) ? msg.url : `https://${msg.url}`;
+        await assertUrlAllowed(url);
         await page.goto(url, { waitUntil: 'domcontentloaded' });
         if (recording) addStep({ action: 'goto', value: page.url() });
         break;
@@ -624,7 +654,7 @@ wss.on('connection', (ws) => {
   // รัน step หนึ่งตัว (ขยาย block ซ้อนได้) คืนรายการ step ที่ถูกซ่อมอัตโนมัติ
   async function execStep(step, testId, stack, ctx) {
     if (step.action !== 'useTest') {
-      const { healed } = await runStep(page, step, { secrets: ctx.secrets });
+      const { healed } = await runStep(page, step, { secrets: ctx.secrets, checkUrl: assertUrlAllowed });
       return healed ? [{ testId, stepId: step.id, locator: healed, label: describeStep(step, ctx) }] : [];
     }
     const block = step.testId && db.tests.get(step.testId);
@@ -699,11 +729,12 @@ wss.on('connection', (ws) => {
   }
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, HOST, () => {
   console.log(`Test Studio PoC running at http://localhost:${PORT}`);
 });
 
 process.on('SIGINT', async () => {
   await browser.close();
+  guardProxy.close();
   process.exit(0);
 });

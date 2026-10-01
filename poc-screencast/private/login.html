@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="th" data-color-mode="auto" data-light-theme="light" data-dark-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>เข้าสู่ระบบ · Test Studio</title>
+  <link rel="stylesheet" href="/vendor/primer/primer.css" />
+  <style>
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bgColor-muted); color: var(--fgColor-default); font-family: var(--fontStack-system); }
+    form { width: min(340px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--borderColor-default); border-radius: 12px; background: var(--bgColor-default); display: grid; gap: 12px; }
+    h1 { margin: 0 0 4px; font-size: 20px; }
+    .error { color: var(--fgColor-danger); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <form method="post" action="/login">
+    <h1>Test Studio</h1>
+    <label for="password">รหัสผ่านเข้าใช้งาน</label>
+    <input id="password" name="password" type="password" class="form-control" autocomplete="current-password" autofocus required />
+    <div id="error" class="error" hidden></div>
+    <button type="submit" class="btn btn-primary">เข้าสู่ระบบ</button>
+  </form>
+  <script>
+    const error = new URLSearchParams(location.search).get('error');
+    if (error) {
+      const el = document.getElementById('error');
+      el.textContent = error === 'locked' ? 'ลองผิดหลายครั้งเกินไป กรุณารอ 15 นาที' : 'รหัสผ่านไม่ถูกต้อง';
+      el.hidden = false;
+    }
+  </script>
+</body>
+</html>
