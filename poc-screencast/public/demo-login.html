@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8" />
+  <title>Demo Login</title>
+  <style>
+    body { font-family: system-ui, sans-serif; display: grid; place-items: center; height: 100vh; margin: 0; background: #f3f4f8; }
+    form { background: #fff; padding: 32px; border-radius: 10px; width: 320px; box-shadow: 0 4px 16px rgba(0,0,0,.08); display: grid; gap: 12px; }
+    select { padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; margin-left: 4px; }
+    input { padding: 10px; font-size: 16px; border: 1px solid #ccc; border-radius: 6px; }
+    button { padding: 10px; font-size: 16px; border: 0; border-radius: 6px; background: #3557e0; color: #fff; cursor: pointer; }
+    .welcome { color: #1a7f37; font-size: 20px; }
+  </style>
+</head>
+<body>
+  <form id="f">
+    <h2>เข้าสู่ระบบ (หน้าทดสอบ)</h2>
+    <label>อีเมล <input id="email" name="email" placeholder="you@example.com" /></label>
+    <label>รหัสผ่าน <input id="password" name="password" type="password" /></label>
+    <label>บทบาท
+      <select id="role" name="role">
+        <option value="tester">Tester</option>
+        <option value="dev">Developer</option>
+        <option value="pm">Project Manager</option>
+      </select>
+    </label>
+    <label><input id="remember" type="checkbox" /> จดจำฉัน</label>
+    <p id="error" style="color:#b42335;margin:0" hidden>กรุณากรอกรหัสผ่าน</p>
+    <button type="submit">เข้าสู่ระบบ</button>
+  </form>
+  <script>
+    // ?v2 = จำลองว่าเว็บถูกแก้: เปลี่ยนชื่อช่องอีเมลและข้อความปุ่ม (ใช้ทดสอบ self-healing)
+    if (new URLSearchParams(location.search).has('v2')) {
+      document.querySelector('label').firstChild.textContent = 'อีเมลผู้ใช้ ';
+      document.querySelector('button').textContent = 'ลงชื่อเข้าใช้';
+    }
+    document.getElementById('f').addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!document.getElementById('password').value) {
+        document.getElementById('error').hidden = false;
+        return;
+      }
+      const email = document.getElementById('email').value;
+      const role = document.getElementById('role').selectedOptions[0].text;
+      history.pushState(null, '', '#welcome');
+      document.body.innerHTML =
+        '<p class="welcome">ยินดีต้อนรับ ' + email.replace(/</g, '&lt;') + ' (' + role + ')</p>';
+    });
+  </script>
+</body>
+</html>

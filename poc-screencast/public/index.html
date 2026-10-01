@@ -1,0 +1,1342 @@
+<!doctype html>
+<html lang="th" data-color-mode="auto" data-light-theme="light" data-dark-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Test Studio</title>
+  <!-- Design system: GitHub Primer (MIT) — ปุ่ม/ฟอร์ม/เมนูจาก Primer CSS, สี/ขนาดจาก Primer Primitives -->
+  <link rel="stylesheet" href="/vendor/primer/primer.css" />
+  <link rel="stylesheet" href="/vendor/primitives/functional/size/radius.css" />
+  <link rel="stylesheet" href="/vendor/primitives/functional/size/border.css" />
+  <script src="/icons.js"></script>
+  <style>
+    /* คอมโพเนนต์ที่ Primer CSS v22 ไม่มีแล้ว (ย้ายไป Primer React) เขียนตามสเปก Primer โดยใช้ token ชุดเดียวกัน */
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bgColor-default);
+      color: var(--fgColor-default);
+      font-family: var(--fontStack-system);
+      font-size: var(--text-body-size-medium, 14px);
+      line-height: 1.5;
+    }
+    .octicon { fill: currentColor; vertical-align: text-bottom; flex: none; }
+    .muted { color: var(--fgColor-muted); }
+    .mono { font-family: var(--fontStack-monospace); font-size: 12px; }
+    .grow { flex: 1; min-width: 0; }
+    .row { display: flex; align-items: center; gap: var(--base-size-8); }
+    [hidden] { display: none !important; }
+
+    /* ---------- header ---------- */
+    .app-header {
+      display: flex; align-items: center; gap: var(--base-size-8);
+      height: 56px; padding: 0 var(--base-size-16);
+      background: var(--bgColor-muted); border-bottom: 1px solid var(--borderColor-default);
+    }
+    .brand { display: flex; align-items: center; gap: 6px; font-weight: 600; margin-right: var(--base-size-8); }
+    .crumb-sep { color: var(--fgColor-muted); }
+    #testName { width: 220px; font-weight: 600; }
+    .conn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fgColor-muted); }
+    .conn::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--fgColor-muted); }
+    .conn.on::before { background: var(--fgColor-success); }
+
+    /* ---------- dropdown menu (Primer SelectMenu) ---------- */
+    .menu-wrap { position: relative; }
+    /* ต้องอยู่เหนือฉากโปร่งใสของ details-overlay (z-index 80) ที่ Primer ใช้ปิดเมนูเมื่อคลิกข้างนอก */
+    .menu-wrap .SelectMenu { position: absolute; top: calc(100% + 4px); z-index: 100; }
+    .menu-wrap .SelectMenu.align-right { right: 0; left: auto; }
+    .menu-wrap .SelectMenu.align-left { left: 0; right: auto; }
+    .SelectMenu-modal { width: 300px; }
+    .SelectMenu-item { gap: var(--base-size-8); align-items: flex-start; text-align: left; }
+    .SelectMenu-item .octicon { margin-top: 2px; }
+    .item-desc { display: block; font-size: 12px; color: var(--fgColor-muted); font-weight: normal; }
+
+    /* ---------- layout ---------- */
+    .layout { display: grid; grid-template-columns: 400px 1fr; height: calc(100vh - 56px); }
+    aside { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--borderColor-default); }
+    .section-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px 4px; font-size: 12px; font-weight: 600; color: var(--fgColor-muted); }
+
+    /* รายการเทสเคส */
+    #tests { list-style: none; margin: 0; padding: 0 8px 8px; max-height: 22vh; overflow: auto; }
+    #tests li { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--borderRadius-medium); cursor: pointer; }
+    #tests li:hover { background: var(--bgColor-muted); }
+    #tests li.active { background: var(--bgColor-accent-muted); font-weight: 600; }
+    #tests li.active::before { content: ''; position: absolute; left: -8px; top: 6px; bottom: 6px; width: 4px; border-radius: 2px; background: var(--borderColor-accent-emphasis); }
+    #tests .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #tests .del { visibility: hidden; }
+    #tests li:hover .del { visibility: visible; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--borderColor-default); flex: none; }
+    .dot.pass { background: var(--fgColor-success); }
+    .dot.fail { background: var(--fgColor-danger); }
+
+    /* แท็บแบบ UnderlineNav */
+    .underline-nav { display: flex; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--borderColor-default); }
+    .underline-nav button {
+      display: inline-flex; align-items: center; gap: 6px; padding: 8px 8px; margin-bottom: -1px;
+      background: none; border: 0; border-bottom: 2px solid transparent; color: var(--fgColor-muted); font: inherit; cursor: pointer;
+    }
+    .underline-nav button:hover { color: var(--fgColor-default); }
+    .underline-nav button[aria-current] { color: var(--fgColor-default); font-weight: 600; border-bottom-color: var(--borderColor-severe-emphasis, #fd8c73); }
+    .panel { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+    /* แถบปุ่มหลัก */
+    .action-bar { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--borderColor-muted); }
+    .action-bar .btn { display: inline-flex; align-items: center; gap: 6px; }
+    .record-dot { color: var(--fgColor-danger); }
+
+    /* แบนเนอร์แบบ Primer Flash */
+    .flash {
+      display: flex; align-items: center; gap: 8px; padding: 10px 16px;
+      border: 1px solid var(--borderColor-accent-muted, var(--borderColor-default)); border-radius: var(--borderRadius-medium);
+      background: var(--bgColor-accent-muted); color: var(--fgColor-default);
+    }
+    .flash > .octicon { color: var(--fgColor-accent); }
+    .flash.danger { background: var(--bgColor-danger-muted); border-color: var(--borderColor-danger-muted, var(--borderColor-default)); }
+    .flash.danger > .octicon { color: var(--fgColor-danger); }
+    .flash.success { background: var(--bgColor-success-muted); border-color: var(--borderColor-success-muted, var(--borderColor-default)); }
+    .flash.success > .octicon { color: var(--fgColor-success); }
+    .flash.attention { background: var(--bgColor-attention-muted); border-color: var(--borderColor-attention-muted, var(--borderColor-default)); }
+    .flash.attention > .octicon { color: var(--fgColor-attention); }
+    .flash .btn { margin-left: auto; }
+    #runBanner { margin: 12px 16px 0; }
+
+    /* รายการ step */
+    #steps { list-style: none; margin: 0; padding: 8px 8px 16px; overflow: auto; flex: 1; }
+    .step {
+      display: grid; grid-template-columns: 16px 24px 28px 1fr auto; gap: 8px; align-items: start;
+      padding: 8px; border-radius: var(--borderRadius-medium); border: 1px solid transparent;
+    }
+    .step:hover { background: var(--bgColor-muted); }
+    .step .grab { color: var(--fgColor-muted); cursor: grab; visibility: hidden; padding-top: 4px; }
+    .step:hover .grab { visibility: visible; }
+    .step .num { font-size: 12px; color: var(--fgColor-muted); text-align: right; padding-top: 4px; font-variant-numeric: tabular-nums; }
+    .step .num .octicon { vertical-align: -2px; }
+    .step.passed .num { color: var(--fgColor-success); }
+    .step.failed .num { color: var(--fgColor-danger); }
+    .step.skipped { opacity: .55; }
+    .step.running { background: var(--bgColor-accent-muted); }
+    .step-icon {
+      width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center;
+      background: var(--bgColor-accent-muted); color: var(--fgColor-accent);
+    }
+    .step-icon.assert { background: var(--bgColor-success-muted); color: var(--fgColor-success); }
+    .step-text { padding-top: 3px; overflow-wrap: anywhere; cursor: pointer; }
+    .step-text .verb { font-weight: 600; }
+    .chip {
+      display: inline-block; padding: 0 6px; margin: 0 2px; border-radius: var(--borderRadius-medium);
+      background: var(--bgColor-muted); border: 1px solid var(--borderColor-muted); line-height: 20px;
+    }
+    .chip.code { font-family: var(--fontStack-monospace); font-size: 12px; }
+    .chip.missing { background: var(--bgColor-attention-muted); border-color: transparent; color: var(--fgColor-attention); }
+    .step-text .value { color: var(--fgColor-muted); }
+    .chip.block { background: var(--bgColor-done-muted, var(--bgColor-muted)); border-color: transparent; color: var(--fgColor-done, var(--fgColor-default)); cursor: pointer; }
+    .chip.block:hover { text-decoration: underline; }
+    .step-icon.block { background: var(--bgColor-done-muted, var(--bgColor-muted)); color: var(--fgColor-done, var(--fgColor-default)); }
+    .health { display: inline-flex; align-items: center; gap: 3px; margin-left: 4px; padding: 0 6px; border-radius: 999px; font-size: 11px; line-height: 18px; vertical-align: 1px; }
+    .health.warn { background: var(--bgColor-attention-muted); color: var(--fgColor-attention); }
+    .health.bad { background: var(--bgColor-danger-muted); color: var(--fgColor-danger); }
+    .heal-box { margin-top: 6px; padding: 8px; border-radius: var(--borderRadius-medium); background: var(--bgColor-attention-muted); font-size: 12px; display: grid; gap: 6px; }
+    .heal-box .heal-title { display: flex; align-items: center; gap: 4px; font-weight: 600; color: var(--fgColor-attention); }
+    .heal-box .btn { justify-self: start; }
+    .step-code { display: block; margin-top: 4px; color: var(--fgColor-muted); overflow-wrap: anywhere; }
+    .step-error { margin-top: 6px; padding: 6px 8px; border-radius: var(--borderRadius-medium); background: var(--bgColor-danger-muted); color: var(--fgColor-danger); font-size: 12px; }
+    .step .tools { display: flex; visibility: hidden; }
+    .step:hover .tools { visibility: visible; }
+    .step.drop-before { border-top-color: var(--borderColor-accent-emphasis); }
+    .step.drop-after { border-bottom-color: var(--borderColor-accent-emphasis); }
+    .step.dragging { opacity: .4; }
+    .step.is-new { animation: newStep 1.6s ease-out; }
+    @keyframes newStep { from { background: var(--bgColor-attention-muted); } to { background: transparent; } }
+    .spin { animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .blankslate { text-align: center; padding: 32px 24px; color: var(--fgColor-muted); }
+    .blankslate h3 { margin: 8px 0; color: var(--fgColor-default); font-size: 16px; }
+    .blankslate ol { text-align: left; display: inline-block; margin: 8px 0 16px; padding-left: 20px; line-height: 1.9; list-style: decimal; }
+
+    .list-footer { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-top: 1px solid var(--borderColor-muted); font-size: 12px; }
+    .list-footer label { display: inline-flex; align-items: center; gap: 4px; color: var(--fgColor-muted); cursor: pointer; white-space: nowrap; }
+    .list-footer .form-select { min-width: 0; flex: 0 1 150px; }
+
+    /* Step Editor */
+    .editor { margin: 4px 0; padding: 16px; border: 1px solid var(--borderColor-accent-emphasis); border-radius: var(--borderRadius-large, 12px); background: var(--bgColor-default); }
+    .editor h4 { margin: 0 0 12px; font-size: 14px; }
+    .editor .form-group { margin: 0 0 14px; }
+    .editor label.lbl { display: block; font-weight: 600; margin-bottom: 4px; }
+    .editor .note { display: block; margin-top: 4px; font-size: 12px; color: var(--fgColor-muted); }
+    .editor .form-control, .editor .form-select { width: 100%; }
+    .editor .row > .form-control { width: auto; flex: 1; }
+    .target-box { display: flex; flex-direction: column; gap: 8px; padding: 10px; border-radius: var(--borderRadius-medium); background: var(--bgColor-muted); }
+    .match { font-size: 12px; display: flex; align-items: center; gap: 4px; }
+    .match.good { color: var(--fgColor-success); }
+    .match.warn { color: var(--fgColor-attention); }
+    .match.bad { color: var(--fgColor-danger); }
+    .editor details summary { cursor: pointer; font-size: 12px; color: var(--fgColor-accent); }
+    .editor .adv { display: grid; gap: 6px; margin-top: 8px; }
+    .editor .footer { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+    .secret-toggle { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; cursor: pointer; }
+    .form-error { color: var(--fgColor-danger); font-size: 12px; margin-bottom: 8px; }
+
+    /* ประวัติการรัน */
+    #history { list-style: none; margin: 0; padding: 8px; overflow: auto; flex: 1; }
+    #history li { display: flex; align-items: center; gap: 10px; padding: 8px; border-radius: var(--borderRadius-medium); cursor: pointer; }
+    #history li:hover { background: var(--bgColor-muted); }
+    .state { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px; font-size: 12px; font-weight: 600; line-height: 22px; color: #fff; }
+    .state.pass { background: var(--bgColor-success-emphasis); }
+    .state.fail { background: var(--bgColor-danger-emphasis); }
+
+    /* ---------- browser view ---------- */
+    main { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 12px 16px 16px; gap: 10px; overflow: auto; background: var(--bgColor-inset); }
+    .progress { height: 6px; border-radius: 3px; background: var(--borderColor-muted); overflow: hidden; flex: 0 0 120px; }
+    .progress > span { display: block; height: 100%; background: var(--bgColor-accent-emphasis); transition: width .2s; }
+    .urlbar { display: flex; gap: 6px; }
+    .urlbar .btn { display: inline-flex; align-items: center; }
+    #url { flex: 1; }
+    #wrap { position: relative; width: 100%; max-width: 1280px; margin: 0 auto; }
+    canvas { display: block; width: 100%; height: auto; background: #fff; border: 1px solid var(--borderColor-default); border-radius: var(--borderRadius-medium); }
+    #wrap.focused canvas { outline: 2px solid var(--borderColor-accent-emphasis); outline-offset: 1px; }
+    #wrap.recording canvas { outline: 2px solid var(--borderColor-danger-emphasis); outline-offset: 1px; }
+    #wrap.assert canvas { outline: 3px solid var(--borderColor-success-emphasis); cursor: crosshair; }
+    #wrap.pick canvas { outline: 3px solid var(--borderColor-attention-emphasis); cursor: crosshair; }
+    /* textarea ซ่อนไว้รับข้อความ (รวม IME/ภาษาไทย) แล้วส่งต่อให้ Playwright */
+    #ime { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: 0; resize: none; border: 0; padding: 0; }
+    #picked { max-width: 1280px; width: 100%; margin: 0 auto; overflow-wrap: anywhere; }
+
+    #selectMenu { position: absolute; z-index: 5; min-width: 180px; max-height: 300px; overflow: auto; padding: 4px; background: var(--overlay-bgColor, #fff); border: 1px solid var(--borderColor-default); border-radius: var(--borderRadius-medium); box-shadow: var(--shadow-floating-large); }
+    #selectMenu div { padding: 6px 10px; border-radius: var(--borderRadius-small); cursor: pointer; }
+    #selectMenu div:hover { background: var(--bgColor-muted); }
+    #selectMenu div.sel { font-weight: 600; }
+
+    /* ---------- dialog ---------- */
+    dialog { padding: 0; width: min(860px, 92vw); border: 1px solid var(--borderColor-default); border-radius: var(--borderRadius-large, 12px); background: var(--overlay-bgColor, var(--bgColor-default)); color: var(--fgColor-default); box-shadow: var(--shadow-floating-large); }
+    dialog::backdrop { background: var(--overlay-backdrop-bgColor, rgba(0,0,0,.4)); }
+    .dlg-head { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--borderColor-default); }
+    .dlg-head h2 { margin: 0; font-size: 14px; flex: 1; display: flex; align-items: center; gap: 8px; }
+    .dlg-body { padding: 16px; max-height: 70vh; overflow: auto; display: grid; gap: 12px; }
+    dialog pre { margin: 0; padding: 16px; max-height: 60vh; overflow: auto; font-size: 12px; background: var(--bgColor-muted); }
+    dialog img { display: block; max-width: 100%; border: 1px solid var(--borderColor-default); border-radius: var(--borderRadius-medium); }
+    .seg { display: inline-flex; border: 1px solid var(--borderColor-default); border-radius: var(--borderRadius-medium); overflow: hidden; }
+    .seg button { border: 0; background: none; padding: 4px 12px; font: inherit; color: var(--fgColor-muted); cursor: pointer; }
+    .seg button[aria-pressed="true"] { background: var(--bgColor-muted); color: var(--fgColor-default); font-weight: 600; }
+    .result { display: grid; grid-template-columns: 20px 1fr auto; gap: 8px; align-items: start; }
+    .result .err { grid-column: 2 / -1; margin-top: 0; }
+    .secret-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--borderColor-muted); }
+
+    /* AI dialog */
+    .ai-btn .octicon { color: var(--fgColor-done, #8250df); }
+    #aiInstruction { width: 100%; min-height: 84px; resize: vertical; }
+    .examples { display: flex; flex-wrap: wrap; gap: 6px; }
+    .examples button { font-size: 12px; }
+    .privacy { display: flex; gap: 6px; align-items: flex-start; font-size: 12px; color: var(--fgColor-muted); }
+    .ai-item { display: grid; grid-template-columns: 20px 28px 1fr; gap: 8px; align-items: start; padding: 8px; border-radius: var(--borderRadius-medium); border: 1px solid var(--borderColor-muted); }
+    .ai-item.invalid { opacity: .6; }
+    .ai-check { display: flex; align-items: center; gap: 4px; margin-top: 4px; font-size: 12px; }
+    .ai-check.good { color: var(--fgColor-success); }
+    .ai-check.warn { color: var(--fgColor-attention); }
+    .ai-check.bad { color: var(--fgColor-danger); }
+    .setup ol { margin: 0; padding-left: 20px; line-height: 1.9; list-style: decimal; }
+    .setup code { background: var(--bgColor-muted); padding: 1px 4px; border-radius: 4px; }
+
+    /* Toast ของ Primer วางมุมล่างซ้าย */
+    #toasts { position: fixed; left: 16px; bottom: 16px; z-index: 50; display: grid; gap: 8px; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <span class="brand"><span data-icon="beaker"></span>Test Studio</span>
+    <select id="project" class="form-select select-sm" aria-label="โปรเจกต์"></select>
+    <span class="crumb-sep">/</span>
+    <input id="testName" class="form-control input-sm" aria-label="ชื่อเทส" title="คลิกเพื่อเปลี่ยนชื่อเทส" />
+    <span class="grow"></span>
+    <span id="conn" class="conn">กำลังเชื่อมต่อ</span>
+    <button id="export" class="btn btn-sm"><span data-icon="code"></span> Export โค้ด</button>
+    <div class="menu-wrap">
+      <details class="details-reset details-overlay" id="moreMenu">
+        <summary class="btn btn-sm" aria-label="เมนูเพิ่มเติม" aria-haspopup="menu"><span data-icon="kebab-horizontal"></span></summary>
+        <div class="SelectMenu align-right">
+          <div class="SelectMenu-modal">
+            <div class="SelectMenu-list" role="menu">
+              <button class="SelectMenu-item" role="menuitem" id="secretsBtn"><span data-icon="lock"></span><span>ตัวแปรลับ<span class="item-desc">รหัสผ่านและค่าที่ไม่ควรเก็บใน step</span></span></button>
+              <button class="SelectMenu-item" role="menuitem" id="newProject"><span data-icon="project"></span><span>สร้างโปรเจกต์ใหม่</span></button>
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <div class="section-head">
+        <span>เทสเคส</span>
+        <button id="newTest" class="btn btn-sm btn-invisible" aria-label="สร้างเทสเคสใหม่"><span data-icon="plus"></span> เทสใหม่</button>
+      </div>
+      <ul id="tests"></ul>
+
+      <nav class="underline-nav" aria-label="มุมมอง">
+        <button data-panel="stepsPanel" aria-current="page"><span data-icon="list-ordered"></span> Steps <span class="Counter" id="stepCount">0</span></button>
+        <button data-panel="historyPanel"><span data-icon="history"></span> ประวัติการรัน</button>
+      </nav>
+
+      <div class="panel" id="stepsPanel">
+        <div class="action-bar">
+          <button id="record" class="btn"></button>
+          <button id="run" class="btn btn-primary"><span data-icon="play"></span> รันเทส</button>
+          <div class="menu-wrap">
+            <details class="details-reset details-overlay" id="assertMenu">
+              <summary class="btn" aria-haspopup="menu"><span data-icon="checklist"></span> ตรวจสอบ <span class="dropdown-caret"></span></summary>
+              <div class="SelectMenu align-left">
+                <div class="SelectMenu-modal">
+                  <header class="SelectMenu-header"><h3 class="SelectMenu-title">เพิ่มการตรวจสอบ</h3></header>
+                  <div class="SelectMenu-list" role="menu">
+                    <button class="SelectMenu-item" role="menuitem" data-mode="assertText"><span data-icon="quote"></span><span>ตรวจข้อความ<span class="item-desc">แล้วคลิกข้อความในหน้าเว็บที่ต้องการตรวจ</span></span></button>
+                    <button class="SelectMenu-item" role="menuitem" data-mode="assertVisible"><span data-icon="eye"></span><span>ตรวจว่าเห็น element<span class="item-desc">แล้วคลิก element ที่ต้องแสดงอยู่</span></span></button>
+                    <button class="SelectMenu-item" role="menuitem" data-mode="assertURL"><span data-icon="link"></span><span>ตรวจ URL ปัจจุบัน<span class="item-desc">บันทึก URL ที่เปิดอยู่ตอนนี้ทันที</span></span></button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+          <button id="aiBtn" class="btn ai-btn" title="อธิบายเป็นภาษาคน แล้วให้ AI สร้าง step"><span data-icon="sparkle-fill"></span> AI</button>
+        </div>
+        <div id="runBanner" hidden></div>
+        <ol id="steps" aria-label="รายการ step"></ol>
+        <div class="list-footer">
+          <select id="newAction" class="form-select select-sm" aria-label="ประเภท step ที่จะเพิ่ม"></select>
+          <button id="addStep" class="btn btn-sm"><span data-icon="plus"></span> เพิ่ม step</button>
+          <span class="grow"></span>
+          <label><input type="checkbox" id="showCode" /> แสดงโค้ด</label>
+          <button id="clear" class="btn btn-sm btn-invisible" title="ลบทุก step">ล้าง</button>
+        </div>
+      </div>
+
+      <div class="panel" id="historyPanel" hidden>
+        <ul id="history"></ul>
+      </div>
+    </aside>
+
+    <main>
+      <div id="modeBanner" class="flash" role="status" aria-live="polite"></div>
+      <div class="urlbar">
+        <button id="back" class="btn" aria-label="ย้อนกลับ"><span data-icon="arrow-left"></span></button>
+        <button id="forward" class="btn" aria-label="ไปข้างหน้า"><span data-icon="arrow-right"></span></button>
+        <button id="reload" class="btn" aria-label="โหลดใหม่"><span data-icon="sync"></span></button>
+        <input id="url" class="form-control" placeholder="ใส่ URL แล้วกด Enter" aria-label="URL" />
+        <button id="go" class="btn">เปิด</button>
+      </div>
+      <div id="wrap">
+        <canvas id="screen" width="1280" height="720"></canvas>
+        <textarea id="ime" aria-label="ส่งการพิมพ์ไปยังหน้าเว็บ" autocomplete="off" autocorrect="off" spellcheck="false"></textarea>
+        <div id="selectMenu" hidden></div>
+      </div>
+      <div id="picked" class="mono muted"></div>
+    </main>
+  </div>
+
+  <dialog id="exportDialog">
+    <div class="dlg-head">
+      <h2>Export</h2>
+      <span class="seg" role="group" aria-label="รูปแบบ">
+        <button data-tab="code" aria-pressed="true">Playwright (TypeScript)</button>
+        <button data-tab="json" aria-pressed="false">JSON</button>
+      </span>
+      <button id="copy" class="btn btn-sm"><span data-icon="copy"></span> คัดลอก</button>
+      <button id="download" class="btn btn-sm"><span data-icon="download"></span> ดาวน์โหลด</button>
+      <button id="closeExport" class="btn btn-sm btn-invisible" aria-label="ปิด"><span data-icon="x"></span></button>
+    </div>
+    <pre id="exportBody"></pre>
+  </dialog>
+
+  <dialog id="runDialog">
+    <div class="dlg-head"><h2 id="runTitle">ผลการรัน</h2><button id="closeRun" class="btn btn-sm btn-invisible" aria-label="ปิด"><span data-icon="x"></span></button></div>
+    <div class="dlg-body" id="runBody"></div>
+  </dialog>
+
+  <dialog id="secretsDialog">
+    <div class="dlg-head"><h2>ตัวแปรลับของโปรเจกต์</h2><button id="closeSecrets" class="btn btn-sm btn-invisible" aria-label="ปิด"><span data-icon="x"></span></button></div>
+    <div class="dlg-body">
+      <div class="muted">ค่าจริงเก็บฝั่ง server และไม่แสดงในหน้านี้ เวลา Export โค้ดจะอ่านจาก environment variable ชื่อเดียวกัน</div>
+      <div id="secretList"></div>
+      <div class="row">
+        <input id="secretName" class="form-control grow" aria-label="ชื่อตัวแปรลับ" placeholder="ชื่อ เช่น ADMIN_PASSWORD" />
+        <input id="secretValue" class="form-control grow" type="password" aria-label="ค่าตัวแปรลับ" placeholder="ค่า" />
+        <button id="secretAdd" class="btn btn-primary">บันทึก</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog id="aiDialog">
+    <div class="dlg-head"><h2><span data-icon="sparkle-fill"></span> สร้าง step ด้วย AI <span id="aiModel" class="muted" style="font-weight:normal"></span></h2><button id="closeAi" class="btn btn-sm btn-invisible" aria-label="ปิด"><span data-icon="x"></span></button></div>
+    <div class="dlg-body">
+      <div id="aiSetup" class="setup" hidden>
+        <strong>ยังไม่ได้ตั้งค่า Gemini API key</strong>
+        <ol>
+          <li>ขอ API key ฟรีที่ <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> (ล็อกอินด้วยบัญชี Google)</li>
+          <li>สร้างไฟล์ <code>poc-screencast/.env</code> (ดูตัวอย่างใน <code>.env.example</code>) แล้วใส่ <code>GEMINI_API_KEY=คีย์ของคุณ</code></li>
+          <li>รีสตาร์ท server (<code>npm start</code>) แล้วเปิดหน้านี้ใหม่</li>
+        </ol>
+      </div>
+      <div id="aiForm">
+        <label class="lbl" for="aiInstruction" style="display:block;font-weight:600;margin-bottom:4px">ต้องการให้เทสทำอะไร</label>
+        <textarea id="aiInstruction" class="form-control" placeholder="เช่น กรอกอีเมล test@example.com และรหัสผ่าน แล้วกดเข้าสู่ระบบ จากนั้นตรวจว่าเห็นคำว่ายินดีต้อนรับ"></textarea>
+        <div class="examples" style="margin-top:8px">
+          <button class="btn btn-sm" data-example="กรอกอีเมล test@example.com และรหัสผ่าน เลือกบทบาท Developer แล้วกดเข้าสู่ระบบ">ตัวอย่าง: ล็อกอิน</button>
+          <button class="btn btn-sm" data-example="กดเข้าสู่ระบบโดยไม่กรอกรหัสผ่าน แล้วตรวจว่ามีข้อความแจ้งให้กรอกรหัสผ่าน">ตัวอย่าง: กรณีผิดพลาด</button>
+          <button class="btn btn-sm" data-example="ตรวจว่าหน้านี้มีช่องอีเมล ช่องรหัสผ่าน และปุ่มเข้าสู่ระบบ">ตัวอย่าง: ตรวจหน้าเว็บ</button>
+        </div>
+        <p class="privacy" style="margin:10px 0 0"><span data-icon="shield-lock"></span><span>ระบบจะส่ง <strong>โครงสร้างหน้าเว็บที่เปิดอยู่</strong> (ชื่อปุ่ม ช่องกรอก ข้อความ โดยตัดค่าที่พิมพ์ในช่องออก) และคำสั่งของคุณไปที่ Google Gemini — ไม่ควรใช้กับหน้าที่มีข้อมูลลับ</span></p>
+        <div class="row" style="justify-content:flex-end;margin-top:12px">
+          <button id="aiGenerate" class="btn btn-primary"><span data-icon="sparkle-fill"></span> สร้าง step</button>
+        </div>
+      </div>
+      <div id="aiError" class="step-error" hidden></div>
+      <div id="aiResult" hidden></div>
+    </div>
+  </dialog>
+
+  <div id="toasts" aria-live="polite"></div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, props = {}, ...children) => {
+      const node = Object.assign(document.createElement(tag), props);
+      node.append(...children.flat().filter((c) => c != null && c !== false));
+      return node;
+    };
+    // ไอคอน Octicons (SVG) จาก /icons.js
+    const icon = (name, cls = '') => {
+      const span = document.createElement('span');
+      span.innerHTML = window.ICONS?.[name] ?? '';
+      const svg = span.firstElementChild;
+      if (svg && cls) svg.classList.add(...cls.split(' '));
+      return svg ?? span;
+    };
+    document.querySelectorAll('[data-icon]').forEach((n) => n.replaceWith(icon(n.dataset.icon, n.className)));
+
+    const api = async (path, opts = {}) => {
+      const res = await fetch(path, {
+        ...opts,
+        headers: { 'Content-Type': 'application/json' },
+        body: opts.body && JSON.stringify(opts.body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || res.statusText);
+      return data;
+    };
+    const store = {
+      get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+      set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+    };
+
+    const ACTION_ICONS = {
+      goto: 'globe', click: 'cursor', fill: 'pencil', press: 'command-palette', selectOption: 'single-select',
+      check: 'checkbox', uncheck: 'square', useTest: 'stack', assertVisible: 'eye', assertText: 'quote', assertCount: 'number', assertURL: 'link',
+    };
+
+    const canvas = $('screen');
+    const ctx = canvas.getContext('2d');
+    const ime = $('ime');
+    const wrap = $('wrap');
+    const urlInput = $('url');
+    urlInput.value = `${location.origin}/demo-login.html`;
+
+    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+    const send = (msg) => ws.readyState === WebSocket.OPEN && ws.send(JSON.stringify(msg));
+
+    let ACTIONS = {};
+    let LOCATOR_TYPES = {};
+    let state = { testId: null, recording: false, mode: 'interact', running: false, steps: [] };
+    let projectId = null;
+    let testList = [];
+    let runStatus = {}; // stepId -> { status, error }
+    let runProgress = null; // { index, total, label }
+    let lastRun = null; // { passed, ms, runId }
+    let editing = null; // { id, draft, secretValue, match, error, saving }
+    let knownIds = null; // ใช้หา step ที่เพิ่งถูกเพิ่ม เพื่อไฮไลต์
+    let showCode = store.get('showCode') === '1';
+    let exportData = null;
+    let exportTab = 'code';
+    $('showCode').checked = showCode;
+
+    // ---------- Toast ----------
+    function toast(message, kind = 'success') {
+      const t = el('div', { className: `Toast Toast--${kind} Toast--animateIn` },
+        el('span', { className: 'Toast-icon' }, icon(kind === 'success' ? 'check' : 'alert')),
+        el('span', { className: 'Toast-content', textContent: message }));
+      $('toasts').append(t);
+      setTimeout(() => t.remove(), 3500);
+    }
+
+    // ---------- เฟรมและการเชื่อมต่อ ----------
+    const img = new Image();
+    img.onload = () => ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    function setConn(on) {
+      $('conn').classList.toggle('on', on);
+      $('conn').textContent = on ? 'เชื่อมต่อแล้ว' : 'ไม่ได้เชื่อมต่อ';
+    }
+
+    ws.onopen = async () => {
+      setConn(true);
+      send({ type: 'navigate', url: urlInput.value });
+      await loadProjects();
+    };
+    ws.onclose = () => setConn(false);
+    ws.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      switch (msg.type) {
+        case 'ready':
+          canvas.width = msg.viewport.width;
+          canvas.height = msg.viewport.height;
+          ACTIONS = msg.actions;
+          LOCATOR_TYPES = msg.locatorTypes;
+          $('newAction').replaceChildren(...actionOptions());
+          break;
+        case 'frame':
+          img.src = `data:image/jpeg;base64,${msg.data}`;
+          break;
+        case 'url':
+          if (document.activeElement !== urlInput) urlInput.value = msg.url;
+          break;
+        case 'state':
+          state = msg;
+          if (editing?.saving) {
+            editing = null;
+            toast('บันทึก step แล้ว');
+          }
+          if (editing && !state.steps.some((s) => s.id === editing.id)) editing = null;
+          render();
+          refreshTestMeta();
+          break;
+        case 'stepAdded':
+          startEdit(msg.id);
+          break;
+        case 'picked':
+          if (editing) {
+            editing.draft.locator = msg.locator;
+            editing.draft.fallbacks = msg.fallbacks;
+            editing.draft.fingerprint = msg.fingerprint;
+            if (editing.draft.action === 'assertText' && !editing.draft.expected) editing.draft.expected = msg.text;
+            editing.match = { kind: 'good', text: 'เลือก element แล้ว' };
+            render();
+            send({ type: 'testLocator', locator: msg.locator });
+          }
+          break;
+        case 'locatorTest':
+          if (editing) {
+            editing.match = msg.error
+              ? { kind: 'bad', text: `locator ใช้ไม่ได้: ${msg.error}` }
+              : msg.count === 1
+                ? { kind: 'good', text: 'พบ 1 ตัวในหน้านี้ (ไฮไลต์สีเหลือง)' }
+                : msg.count === 0
+                  ? { kind: 'warn', text: 'ไม่พบในหน้าที่เปิดอยู่ — ถ้า element อยู่หน้าอื่นถือว่าปกติ' }
+                  : { kind: 'bad', text: `พบ ${msg.count} ตัว — ต้องเจาะจงให้เหลือ 1 ตัว (ลองเลือกใหม่จากหน้าเว็บ)` };
+            render();
+          }
+          break;
+        case 'element':
+          $('picked').textContent = msg.code ? `Element ที่คลิก: ${msg.code}` : '';
+          break;
+        case 'selectOpen':
+          openSelect(msg);
+          break;
+        case 'runStart':
+          runStatus = {};
+          editing = null;
+          lastRun = null;
+          runProgress = { index: 0, total: state.steps.length, label: '' };
+          state.running = true;
+          render();
+          break;
+        case 'runStep':
+          runStatus[msg.id] = msg;
+          if (msg.status === 'running') {
+            const i = state.steps.findIndex((s) => s.id === msg.id);
+            runProgress = { index: i + 1, total: state.steps.length, label: state.steps[i]?.label ?? '' };
+          }
+          render();
+          break;
+        case 'runDone':
+          runProgress = null;
+          lastRun = msg;
+          render();
+          loadHistory();
+          loadTests();
+          break;
+        case 'export':
+          exportData = msg;
+          showExport();
+          break;
+        case 'aiResult':
+          showAiResult(msg);
+          break;
+        case 'aiError':
+          setAiBusy(false);
+          $('aiError').textContent = msg.message;
+          $('aiError').hidden = false;
+          break;
+        case 'healAccepted':
+          for (const r of Object.values(runStatus)) {
+            if (r.healed) r.healed = r.healed.filter((h) => !(h.testId === msg.testId && h.stepId === msg.stepId));
+          }
+          toast('อัปเดต locator แล้ว');
+          render();
+          break;
+        case 'error':
+          if (editing?.saving) {
+            editing.saving = false;
+            editing.error = msg.message;
+            render();
+          } else {
+            toast(msg.message, 'error');
+          }
+          break;
+      }
+    };
+
+    function actionOptions(selected) {
+      const groups = { action: 'การกระทำ', assert: 'การตรวจสอบ' };
+      return Object.entries(groups).map(([g, label]) =>
+        el('optgroup', { label },
+          Object.entries(ACTIONS).filter(([, a]) => a.group === g)
+            .map(([k, a]) => el('option', { value: k, textContent: a.label, selected: k === selected })))
+      );
+    }
+
+    // ---------- โปรเจกต์และเทสเคส ----------
+    async function loadProjects(selectId) {
+      const projects = await api('/api/projects');
+      $('project').replaceChildren(...projects.map((p) => el('option', { value: p.id, textContent: p.name })));
+      const wanted = selectId ?? Number(store.get('projectId'));
+      projectId = projects.some((p) => p.id === wanted) ? wanted : projects[0]?.id;
+      $('project').value = projectId;
+      await loadTests();
+      const lastTest = Number(store.get('testId'));
+      const first = testList.find((t) => t.id === lastTest) ?? testList[0];
+      if (first) openTest(first.id);
+      else await createTest('เทสใหม่');
+    }
+
+    async function loadTests() {
+      if (!projectId) return;
+      testList = await api(`/api/projects/${projectId}/tests`);
+      renderTests();
+    }
+
+    // อัปเดตจำนวน step ในรายการเทสโดยไม่ต้องเรียก API ทุกครั้งที่ step เปลี่ยน
+    function refreshTestMeta() {
+      const t = testList.find((t) => t.id === state.testId);
+      if (t && t.step_count !== state.steps.length) {
+        t.step_count = state.steps.length;
+        renderTests();
+      }
+    }
+
+    function renderTests() {
+      $('tests').replaceChildren(
+        ...testList.map((t) =>
+          el('li', { className: t.id === state.testId ? 'active' : '', onclick: () => openTest(t.id) },
+            el('span', { className: `dot ${t.last_passed == null ? '' : t.last_passed ? 'pass' : 'fail'}`, title: t.last_passed == null ? 'ยังไม่เคยรัน' : t.last_passed ? 'รันล่าสุดผ่าน' : 'รันล่าสุดไม่ผ่าน' }),
+            el('span', { className: 'name', textContent: t.name }),
+            el('span', { className: 'Counter', textContent: t.step_count, title: 'จำนวน step' }),
+            el('button', {
+              className: 'btn-octicon btn-octicon-danger del',
+              ariaLabel: `ลบ ${t.name}`,
+              onclick: async (e) => {
+                e.stopPropagation();
+                if (!confirm(`ลบเทสเคส "${t.name}" และประวัติการรันทั้งหมด?`)) return;
+                await api(`/api/tests/${t.id}`, { method: 'DELETE' });
+                await loadTests();
+                if (t.id === state.testId) testList[0] ? openTest(testList[0].id) : createTest('เทสใหม่');
+              },
+            }, icon('trash'))
+          )
+        )
+      );
+    }
+
+    function openTest(id) {
+      if (state.running) return;
+      runStatus = {};
+      lastRun = null;
+      editing = null;
+      knownIds = null;
+      store.set('testId', id);
+      const t = testList.find((t) => t.id === id);
+      $('testName').value = t?.name ?? '';
+      send({ type: 'openTest', id });
+      state.testId = id;
+      renderTests();
+      loadHistory();
+    }
+
+    async function createTest(name) {
+      const { id } = await api(`/api/projects/${projectId}/tests`, { method: 'POST', body: { name } });
+      await loadTests();
+      openTest(id);
+    }
+
+    $('project').onchange = async () => {
+      projectId = Number($('project').value);
+      store.set('projectId', projectId);
+      await loadTests();
+      testList[0] ? openTest(testList[0].id) : createTest('เทสใหม่');
+    };
+    $('newProject').onclick = async () => {
+      $('moreMenu').open = false;
+      const name = prompt('ชื่อโปรเจกต์ใหม่')?.trim();
+      if (!name) return;
+      const { id } = await api('/api/projects', { method: 'POST', body: { name } });
+      store.set('projectId', id);
+      await loadProjects(id);
+    };
+    $('newTest').onclick = () => {
+      const name = prompt('ชื่อเทสเคสใหม่')?.trim();
+      if (name) createTest(name);
+    };
+    $('testName').onchange = async () => {
+      const name = $('testName').value.trim();
+      if (!name || !state.testId) return;
+      await api(`/api/tests/${state.testId}`, { method: 'PATCH', body: { name } });
+      await loadTests();
+      toast('เปลี่ยนชื่อเทสแล้ว');
+    };
+
+    // ---------- แบนเนอร์บอกว่าระบบกำลังทำอะไร ----------
+    function renderModeBanner() {
+      const b = $('modeBanner');
+      const { recording, mode, running, steps } = state;
+      let kind = '', ic = 'info', text = '', action = null;
+      if (running && runProgress) {
+        ic = 'sync';
+        text = `กำลังรัน step ${runProgress.index} จาก ${runProgress.total}${runProgress.label ? `: ${runProgress.label}` : ''}`;
+        const pct = runProgress.total ? Math.round((runProgress.index / runProgress.total) * 100) : 0;
+        action = el('span', { className: 'progress', title: `${pct}%` }, el('span', { style: `width:${pct}%` }));
+      } else if (mode === 'pick') {
+        kind = 'attention'; ic = 'crosshairs';
+        text = 'คลิก element ในหน้าเว็บด้านล่าง เพื่อใช้กับ step ที่กำลังแก้ไข';
+        action = el('button', { className: 'btn btn-sm', textContent: 'ยกเลิก (Esc)', onclick: () => send({ type: 'mode', mode: 'pick' }) });
+      } else if (mode === 'assertVisible' || mode === 'assertText') {
+        kind = 'success'; ic = mode === 'assertText' ? 'quote' : 'eye';
+        text = mode === 'assertText' ? 'คลิกข้อความในหน้าเว็บที่ต้องการตรวจ' : 'คลิก element ในหน้าเว็บที่ต้องแสดงอยู่';
+        action = el('button', { className: 'btn btn-sm', textContent: 'ยกเลิก (Esc)', onclick: () => send({ type: 'mode', mode }) });
+      } else if (recording) {
+        kind = 'danger'; ic = 'dot-fill';
+        text = 'กำลังบันทึก — ทุกการคลิกและพิมพ์ในหน้าเว็บจะกลายเป็น step';
+        action = el('button', { className: 'btn btn-sm btn-danger', textContent: 'หยุดบันทึก', onclick: () => send({ type: 'record', on: false }) });
+      } else if (steps.length === 0) {
+        ic = 'light-bulb';
+        text = 'เริ่มต้น: เปิดหน้าเว็บที่ต้องการทดสอบด้านล่าง แล้วกด "บันทึก" ทางซ้าย';
+      } else {
+        text = 'พร้อมใช้งาน — กด "รันเทส" เพื่อทดสอบ หรือ "บันทึก" เพื่อเพิ่ม step ต่อท้าย';
+      }
+      b.className = `flash ${kind}`;
+      b.replaceChildren(...[icon(ic, running ? 'spin' : ''), el('span', { className: 'grow', textContent: text }), action].filter(Boolean));
+      wrap.classList.toggle('recording', recording && mode === 'interact');
+      wrap.classList.toggle('assert', mode === 'assertVisible' || mode === 'assertText');
+      wrap.classList.toggle('pick', mode === 'pick');
+    }
+
+    function renderRunBanner() {
+      const b = $('runBanner');
+      if (!lastRun) { b.hidden = true; return; }
+      b.hidden = false;
+      // ยังมีจุดที่ซ่อมอัตโนมัติแต่ผู้ใช้ยังไม่ได้ยืนยัน
+      const pendingHeals = Object.values(runStatus).reduce((n, r) => n + (r.healed?.length ?? 0), 0);
+      const healedPass = lastRun.passed && pendingHeals > 0;
+      b.className = `flash ${healedPass ? 'attention' : lastRun.passed ? 'success' : 'danger'}`;
+      const failedIdx = state.steps.findIndex((s) => runStatus[s.id]?.status === 'failed');
+      b.replaceChildren(
+        icon(healedPass ? 'tools' : lastRun.passed ? 'check-circle-fill' : 'x-circle-fill'),
+        el('span', { className: 'grow' },
+          el('strong', {
+            textContent: healedPass
+              ? `ผ่าน แต่ซ่อม locator อัตโนมัติ ${pendingHeals} จุด`
+              : lastRun.passed ? 'ผ่านทุก step' : failedIdx >= 0 ? `ไม่ผ่านที่ step ${failedIdx + 1}` : 'ไม่ผ่าน',
+          }),
+          el('span', { className: 'muted', textContent: ` · ${(lastRun.ms / 1000).toFixed(1)} วินาที` })),
+        ...(lastRun.passed ? [] : [el('button', { className: 'btn btn-sm', textContent: 'ดูรายละเอียด', onclick: () => showRun(lastRun.runId) })])
+      );
+    }
+
+    // ---------- รายการ step และ Step Editor ----------
+    let dragId = null;
+
+    function render() {
+      const { recording, running, steps } = state;
+      const rec = $('record');
+      rec.classList.toggle('btn-danger', recording);
+      rec.replaceChildren(icon(recording ? 'square-fill' : 'dot-fill', recording ? '' : 'record-dot'), el('span', { textContent: recording ? 'หยุดบันทึก' : 'บันทึก' }));
+      for (const id of ['record', 'export', 'clear', 'go', 'back', 'forward', 'reload', 'addStep', 'newTest', 'project', 'newAction', 'aiBtn'])
+        $(id).disabled = running;
+      $('run').disabled = running || steps.length === 0 || !!editing;
+      $('run').title = editing ? 'บันทึกหรือยกเลิกการแก้ไข step ก่อนรัน' : '';
+      $('stepCount').textContent = steps.length;
+      renderModeBanner();
+      renderRunBanner();
+
+      const list = $('steps');
+      if (steps.length === 0) {
+        list.replaceChildren(
+          el('li', { className: 'blankslate' },
+            icon('list-ordered'),
+            el('h3', { textContent: 'ยังไม่มี step' }),
+            el('ol', {},
+              el('li', { textContent: 'เปิดหน้าเว็บที่ต้องการทดสอบ (ช่อง URL ด้านขวา)' }),
+              el('li', { textContent: 'กด "บันทึก" แล้วใช้งานหน้าเว็บตามปกติ' }),
+              el('li', { textContent: 'เพิ่ม "ตรวจสอบ" แล้วกด "รันเทส"' })),
+            el('div', {}, el('button', { className: 'btn btn-primary', disabled: running, onclick: () => send({ type: 'record', on: true }) }, icon('dot-fill'), ' เริ่มบันทึก')))
+        );
+        knownIds = new Set();
+        return;
+      }
+
+      const isNew = (id) => knownIds && !knownIds.has(id);
+      list.replaceChildren(...steps.map((s, i) => (editing?.id === s.id ? renderEditor(s, i) : renderStep(s, i, isNew(s.id)))));
+      knownIds = new Set(steps.map((s) => s.id));
+      const focus = list.querySelector('.running, .editor') ?? [...list.querySelectorAll('.is-new')].at(-1);
+      focus?.scrollIntoView({ block: 'nearest' });
+    }
+
+    function renderStep(s, i, isNew) {
+      const r = runStatus[s.id];
+      const canEdit = !state.running && !editing;
+      const p = s.parts;
+      const numCell = el('span', { className: 'num' },
+        r?.status === 'passed' ? icon('check-circle-fill')
+          : r?.status === 'failed' ? icon('x-circle-fill')
+          : r?.status === 'running' ? icon('sync', 'spin')
+          : r?.status === 'skipped' ? icon('skip')
+          : String(i + 1));
+      const h = state.health?.[s.id];
+      const text = el('div', { className: 'step-text', title: canEdit ? 'คลิกเพื่อแก้ไข' : '', onclick: () => canEdit && startEdit(s.id) },
+        el('span', { className: 'verb', textContent: p.verb }), ' ',
+        p.target?.block
+          ? el('span', {
+              className: 'chip block',
+              textContent: p.target.text,
+              title: 'เปิดเทสนี้',
+              onclick: (e) => { e.stopPropagation(); if (!state.running) openTest(s.testId); },
+            })
+          : p.target ? el('span', { className: `chip${p.target.code ? ' code' : ''}`, textContent: p.target.text }) : null,
+        p.missingTarget ? el('span', { className: 'chip missing', textContent: p.missingTarget }) : null,
+        p.value ? el('span', { className: 'value', textContent: ` ${p.value}` }) : null,
+        healthBadge(h),
+        showCode ? el('code', { className: 'step-code mono', textContent: s.code }) : null,
+        r?.status === 'failed' ? el('div', { className: 'step-error', textContent: r.error }) : null,
+        r?.healed?.length ? healBox(r.healed) : null
+      );
+      const li = el('li', { className: `step ${r?.status ?? ''}${isNew ? ' is-new' : ''}`, draggable: canEdit },
+        el('span', { className: 'grab', title: 'ลากเพื่อสลับลำดับ' }, canEdit ? icon('grabber') : null),
+        numCell,
+        el('span', { className: `step-icon ${p.group === 'assert' ? 'assert' : s.action === 'useTest' ? 'block' : ''}`, title: ACTIONS[s.action]?.label }, icon(ACTION_ICONS[s.action] ?? 'dot-fill')),
+        text,
+        el('span', { className: 'tools' },
+          el('button', { className: 'btn-octicon', ariaLabel: 'แก้ไข step', disabled: !canEdit, onclick: () => startEdit(s.id) }, icon('pencil')),
+          el('button', { className: 'btn-octicon btn-octicon-danger', ariaLabel: 'ลบ step', disabled: state.running, onclick: () => send({ type: 'deleteStep', id: s.id }) }, icon('trash')))
+      );
+
+      // ลากสลับลำดับ: วางเหนือหรือใต้ step เป้าหมายตามตำแหน่งเมาส์
+      li.addEventListener('dragstart', (e) => { dragId = s.id; li.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+      li.addEventListener('dragend', () => { dragId = null; li.classList.remove('dragging'); clearDropMarks(); });
+      li.addEventListener('dragover', (e) => {
+        if (dragId == null || dragId === s.id) return;
+        e.preventDefault();
+        const after = e.clientY > li.getBoundingClientRect().top + li.offsetHeight / 2;
+        clearDropMarks();
+        li.classList.add(after ? 'drop-after' : 'drop-before');
+      });
+      li.addEventListener('drop', (e) => {
+        e.preventDefault();
+        const after = li.classList.contains('drop-after');
+        const from = state.steps.findIndex((x) => x.id === dragId);
+        let to = i + (after ? 1 : 0);
+        if (from < to) to -= 1; // server ลบตัวเดิมออกก่อนแล้วค่อยแทรก
+        clearDropMarks();
+        if (from !== to) send({ type: 'moveStep', id: dragId, to });
+      });
+      return li;
+    }
+
+    // Locator health: แสดงเฉพาะ step ที่เคยต้องซ่อมหรือพังในการรันล่าสุด
+    function healthBadge(h) {
+      if (!h || (!h.healed && !h.failed)) return null;
+      const bad = h.failed > 0;
+      return el('span', {
+        className: `health ${bad ? 'bad' : 'warn'}`,
+        title: `จาก ${h.runs} การรันล่าสุด: ซ่อมอัตโนมัติ ${h.healed} ครั้ง, ไม่ผ่าน ${h.failed} ครั้ง`,
+      }, icon(bad ? 'alert' : 'tools'), bad ? `พัง ${h.failed}/${h.runs}` : `ซ่อม ${h.healed}/${h.runs}`);
+    }
+
+    // กล่องแจ้งว่า locator ถูกซ่อมอัตโนมัติ พร้อมปุ่มยืนยันใช้ตัวใหม่
+    function healBox(heals) {
+      return el('div', { className: 'heal-box', onclick: (e) => e.stopPropagation() },
+        el('div', { className: 'heal-title' }, icon('tools'), 'ซ่อมอัตโนมัติ — locator เดิมหาไม่เจอ'),
+        heals.map((hl) => el('div', {},
+          el('div', { className: 'muted', textContent: hl.testId !== state.testId ? `ใน block: ${hl.label} — ใช้ตัวนี้แทน:` : 'ใช้ตัวนี้แทน:' }),
+          el('span', { className: `chip${hl.locator.type === 'css' ? ' code' : ''}`, textContent: locatorLabel(hl.locator) }))),
+        el('button', {
+          className: 'btn btn-sm',
+          textContent: 'ใช้ locator ใหม่',
+          title: 'ยืนยันว่าเป็น element ที่ถูกต้อง แล้วใช้ locator นี้เป็นตัวหลัก',
+          onclick: () => heals.forEach((hl) => send({ type: 'acceptHeal', testId: hl.testId, stepId: hl.stepId, locator: hl.locator })),
+        }));
+    }
+
+    function clearDropMarks() {
+      document.querySelectorAll('.drop-before, .drop-after').forEach((n) => n.classList.remove('drop-before', 'drop-after'));
+    }
+
+    function startEdit(id) {
+      const s = state.steps.find((x) => x.id === id);
+      if (!s) return;
+      const { label, parts, code, complete, ...draft } = s;
+      editing = { id, draft: structuredClone(draft), secretValue: '', match: null, error: null, saving: false };
+      render();
+      if (draft.locator) send({ type: 'testLocator', locator: draft.locator });
+    }
+
+    function stopEdit() {
+      editing = null;
+      if (state.mode === 'pick') send({ type: 'mode', mode: 'pick' }); // สลับกลับเป็น interact
+      send({ type: 'clearHighlight' });
+      render();
+    }
+
+    function locatorLabel(loc) {
+      if (!loc) return null;
+      if (loc.type === 'role') return loc.name ? `${loc.role} "${loc.name}"` : loc.role;
+      return `${LOCATOR_TYPES[loc.type]}: ${loc.value}`;
+    }
+
+    function renderEditor(s, i) {
+      const d = editing.draft;
+      const spec = ACTIONS[d.action];
+      const input = (obj, key, props = {}) =>
+        el('input', { className: 'form-control', value: obj[key] ?? '', oninput: (e) => { obj[key] = e.target.value; }, ...props });
+      const group = (labelText, control, note) =>
+        el('div', { className: 'form-group' }, el('label', { className: 'lbl', textContent: labelText }), control, note ? el('span', { className: 'note', textContent: note }) : null);
+
+      const parts = [
+        el('h4', { textContent: `แก้ไข step ${i + 1}` }),
+        group('ทำอะไร', el('select', {
+          className: 'form-select',
+          ariaLabel: 'ประเภท step',
+          onchange: (e) => {
+            d.action = e.target.value;
+            const next = ACTIONS[d.action];
+            if (!next.locator) delete d.locator;
+            for (const f of Object.keys(next.fields ?? {})) d[f] ??= '';
+            if (d.action !== 'fill') delete d.secret;
+            render();
+          },
+        }, actionOptions(d.action))),
+      ];
+
+      if (spec.locator) {
+        const loc = d.locator ?? null;
+        const m = editing.match;
+        const picking = state.mode === 'pick';
+        const pickBtn = el('button', { className: `btn btn-sm ${picking ? 'btn-primary' : ''}`, onclick: () => send({ type: 'mode', mode: 'pick' }) },
+          icon('crosshairs'), picking ? ' กำลังรอคลิกในหน้าเว็บ…' : loc ? ' เลือกใหม่จากหน้าเว็บ' : ' เลือกจากหน้าเว็บ');
+
+        // แก้ locator เอง (ขั้นสูง)
+        const typeSelect = el('select', {
+          className: 'form-select',
+          ariaLabel: 'ประเภท locator',
+          onchange: (e) => {
+            const type = e.target.value;
+            d.locator = type === '' ? null : type === 'role' ? { type, role: loc?.role ?? '', name: loc?.name ?? '' } : { type, value: loc?.value ?? loc?.name ?? '' };
+            // locator ที่แก้เองอาจชี้ไป element อื่น ตัวสำรองและลายนิ้วมือเดิมจึงใช้ไม่ได้
+            delete d.fallbacks;
+            delete d.fingerprint;
+            editing.match = null;
+            render();
+          },
+        },
+          el('option', { value: '', textContent: spec.locator === 'optional' ? '(ไม่ระบุ — กดที่หน้าเว็บ)' : '— เลือกประเภท —', selected: !loc, disabled: spec.locator === 'required' }),
+          Object.entries(LOCATOR_TYPES).map(([k, label]) => el('option', { value: k, textContent: label, selected: loc?.type === k })));
+        const advInputs = !loc ? [] : loc.type === 'role'
+          ? [input(loc, 'role', { placeholder: 'role เช่น button', ariaLabel: 'role' }), input(loc, 'name', { placeholder: 'ชื่อ (ไม่บังคับ)', ariaLabel: 'ชื่อ' })]
+          : [input(loc, 'value', { placeholder: 'ค่า locator', ariaLabel: 'ค่า locator' })];
+
+        parts.push(group(spec.locator === 'optional' ? 'กับ element ไหน (ไม่บังคับ)' : 'กับ element ไหน',
+          el('div', { className: 'target-box' },
+            loc
+              ? el('div', {}, el('span', { className: `chip${loc.type === 'css' || loc.type === 'testid' ? ' code' : ''}`, textContent: locatorLabel(loc) }))
+              : el('div', { className: 'muted', textContent: spec.locator === 'optional' ? 'ไม่ระบุ — จะกดปุ่มที่หน้าเว็บโดยตรง' : 'ยังไม่ได้เลือก element' }),
+            m ? el('div', { className: `match ${m.kind}` }, icon(m.kind === 'good' ? 'check' : 'alert'), m.text) : null,
+            el('div', { className: 'row' }, pickBtn,
+              loc ? el('button', { className: 'btn btn-sm', onclick: () => send({ type: 'testLocator', locator: d.locator }) }, icon('beaker'), ' ทดสอบ') : null),
+            el('details', {},
+              el('summary', { textContent: 'แก้ locator เอง (ขั้นสูง)' }),
+              el('div', { className: 'adv' }, typeSelect, ...advInputs))
+          )));
+      }
+
+      for (const [field, label] of Object.entries(spec.fields ?? {})) {
+        const note = spec.hints?.[field];
+        if (field === 'testId') {
+          const others = testList.filter((t) => t.id !== state.testId);
+          parts.push(group(label, el('select', {
+            className: 'form-select',
+            ariaLabel: label,
+            onchange: (e) => { d.testId = Number(e.target.value) || null; },
+          },
+            el('option', { value: '', textContent: others.length ? '— เลือกเทส —' : '(ยังไม่มีเทสอื่นในโปรเจกต์นี้)', selected: !d.testId }),
+            others.map((t) => el('option', { value: t.id, textContent: `${t.name} (${t.step_count} steps)`, selected: t.id === d.testId }))), note));
+          continue;
+        }
+        if (d.action !== 'fill') {
+          parts.push(group(label, input(d, field, { ariaLabel: label }), note));
+          continue;
+        }
+        // กรอกข้อความ: เลือกได้ว่าเป็นค่าลับ (รหัสผ่าน) หรือข้อความปกติ
+        const secretToggle = el('label', { className: 'secret-toggle' },
+          el('input', { type: 'checkbox', checked: !!d.secret, onchange: (e) => { d.secret = e.target.checked ? 'TEST_PASSWORD' : undefined; render(); } }),
+          'เป็นค่าลับ (เช่น รหัสผ่าน) — ไม่เก็บค่าจริงใน step');
+        const control = d.secret
+          ? el('div', { className: 'row' },
+              input(d, 'secret', { placeholder: 'ชื่อตัวแปร', ariaLabel: 'ชื่อตัวแปรลับ' }),
+              input(editing, 'secretValue', { type: 'password', placeholder: 'ค่าใหม่ (เว้นว่าง = ไม่เปลี่ยน)', ariaLabel: 'ค่าใหม่ของตัวแปรลับ' }))
+          : input(d, field, { ariaLabel: label });
+        const g = group(label, control, d.secret ? 'ค่าจริงเก็บเป็นตัวแปรลับของโปรเจกต์' : null);
+        g.append(secretToggle);
+        parts.push(g);
+      }
+
+      if (editing.error) parts.push(el('div', { className: 'form-error', textContent: editing.error }));
+      parts.push(el('div', { className: 'footer' },
+        el('button', { className: 'btn', textContent: 'ยกเลิก', onclick: stopEdit }),
+        el('button', {
+          className: 'btn btn-primary',
+          textContent: 'บันทึก step',
+          onclick: () => {
+            editing.saving = true;
+            editing.error = null;
+            delete runStatus[editing.id]; // ผลการรันเดิมไม่ตรงกับ step ที่แก้แล้ว
+            send({ type: 'updateStep', id: editing.id, step: d, secretValue: editing.secretValue });
+            send({ type: 'clearHighlight' });
+          },
+        })));
+      return el('li', { className: 'editor' }, ...parts);
+    }
+
+    $('addStep').onclick = () => send({ type: 'insertStep', action: $('newAction').value });
+    $('record').onclick = () => send({ type: 'record', on: !state.recording });
+    $('run').onclick = () => send({ type: 'run' });
+    $('clear').onclick = () => {
+      if (!confirm('ลบทุก step ในเทสนี้?')) return;
+      runStatus = {};
+      lastRun = null;
+      send({ type: 'clearSteps' });
+    };
+    $('export').onclick = () => send({ type: 'export' });
+    $('showCode').onchange = (e) => { showCode = e.target.checked; store.set('showCode', showCode ? '1' : '0'); render(); };
+    document.querySelectorAll('#assertMenu [data-mode]').forEach((b) => {
+      b.onclick = () => {
+        $('assertMenu').open = false;
+        if (state.running) return;
+        send({ type: 'mode', mode: b.dataset.mode });
+        if (b.dataset.mode === 'assertURL') toast('เพิ่มการตรวจ URL แล้ว');
+      };
+    });
+    // ปิดเมนู dropdown เมื่อคลิกที่อื่น
+    document.addEventListener('click', (e) => {
+      document.querySelectorAll('details.details-overlay[open]').forEach((d) => { if (!d.contains(e.target)) d.open = false; });
+    });
+
+    // ---------- แท็บ Steps / ประวัติ ----------
+    document.querySelectorAll('.underline-nav button').forEach((b) => {
+      b.onclick = () => {
+        document.querySelectorAll('.underline-nav button').forEach((x) => x.toggleAttribute('aria-current', x === b));
+        document.querySelectorAll('.panel').forEach((p) => (p.hidden = p.id !== b.dataset.panel));
+        if (b.dataset.panel === 'historyPanel') loadHistory();
+      };
+    });
+
+    const fmtTime = (iso) => new Date(iso).toLocaleString('th-TH', { dateStyle: 'medium', timeStyle: 'short' });
+
+    async function loadHistory() {
+      if (!state.testId) return;
+      const runs = await api(`/api/tests/${state.testId}/runs`);
+      $('history').replaceChildren(
+        ...(runs.length
+          ? runs.map((r) =>
+              el('li', { onclick: () => showRun(r.id) },
+                el('span', { className: `state ${r.passed ? 'pass' : 'fail'}` }, icon(r.passed ? 'check' : 'x'), r.passed ? 'ผ่าน' : 'ไม่ผ่าน'),
+                el('span', { className: 'grow', textContent: fmtTime(r.started_at) }),
+                el('span', { className: 'muted', textContent: `${(r.duration_ms / 1000).toFixed(1)} วิ` })))
+          : [el('li', { className: 'blankslate', style: 'display:block' }, icon('history'), el('h3', { textContent: 'ยังไม่เคยรันเทสนี้' }), 'กด "รันเทส" ที่แท็บ Steps')])
+      );
+    }
+
+    const RESULT_ICON = { passed: ['check-circle-fill', 'var(--fgColor-success)'], failed: ['x-circle-fill', 'var(--fgColor-danger)'], skipped: ['skip', 'var(--fgColor-muted)'] };
+    async function showRun(id) {
+      const run = await api(`/api/runs/${id}`);
+      $('runTitle').replaceChildren(
+        el('span', { className: `state ${run.passed ? 'pass' : 'fail'}`, textContent: run.passed ? 'ผ่าน' : 'ไม่ผ่าน' }),
+        `${fmtTime(run.started_at)} · ${(run.duration_ms / 1000).toFixed(1)} วินาที`);
+      $('runBody').replaceChildren(
+        ...run.results.map((r, i) => {
+          const [ic, color] = RESULT_ICON[r.status] ?? ['dot-fill', 'inherit'];
+          return el('div', { className: 'result' },
+            el('span', { style: `color:${color}` }, icon(ic)),
+            el('span', { textContent: `${i + 1}. ${r.label}` }),
+            el('span', { className: 'muted', textContent: r.ms != null ? `${r.ms} ms` : '' }),
+            r.error ? el('div', { className: 'err step-error', textContent: r.error }) : null,
+            r.healed?.length
+              ? el('div', { className: 'err heal-box' },
+                  el('div', { className: 'heal-title' }, icon('tools'), 'ซ่อมอัตโนมัติ'),
+                  r.healed.map((hl) => el('div', { textContent: `${hl.label} → ใช้ ${locatorLabel(hl.locator)}` })))
+              : null);
+        }),
+        ...(run.has_screenshot
+          ? [el('strong', { textContent: 'Screenshot ตอนที่พัง' }), el('img', { src: `/api/runs/${id}/screenshot`, alt: 'screenshot ตอนที่พัง' })]
+          : [])
+      );
+      $('runDialog').showModal();
+    }
+    $('closeRun').onclick = () => $('runDialog').close();
+
+    // ---------- ตัวแปรลับ ----------
+    async function loadSecrets() {
+      const names = await api(`/api/projects/${projectId}/secrets`);
+      $('secretList').replaceChildren(
+        ...(names.length
+          ? names.map((name) =>
+              el('div', { className: 'secret-row' },
+                icon('lock'),
+                el('code', { className: 'grow mono', textContent: name }),
+                el('span', { className: 'muted', textContent: '••••••' }),
+                el('button', { className: 'btn btn-sm', textContent: 'เปลี่ยนค่า', onclick: () => { $('secretName').value = name; $('secretValue').focus(); } }),
+                el('button', {
+                  className: 'btn-octicon btn-octicon-danger',
+                  ariaLabel: `ลบ ${name}`,
+                  onclick: async () => {
+                    if (!confirm(`ลบตัวแปร ${name}?`)) return;
+                    await api(`/api/projects/${projectId}/secrets/${encodeURIComponent(name)}`, { method: 'DELETE' });
+                    loadSecrets();
+                  },
+                }, icon('trash'))))
+          : [el('div', { className: 'muted', textContent: 'ยังไม่มีตัวแปรลับ — ระบบจะสร้างให้อัตโนมัติเมื่อบันทึกการพิมพ์ในช่องรหัสผ่าน' })])
+      );
+    }
+    $('secretsBtn').onclick = async () => { $('moreMenu').open = false; await loadSecrets(); $('secretsDialog').showModal(); };
+    $('closeSecrets').onclick = () => $('secretsDialog').close();
+    $('secretAdd').onclick = async () => {
+      const name = $('secretName').value.trim().toUpperCase();
+      if (!name) return;
+      try {
+        await api(`/api/projects/${projectId}/secrets/${encodeURIComponent(name)}`, { method: 'PUT', body: { value: $('secretValue').value } });
+        $('secretName').value = '';
+        $('secretValue').value = '';
+        loadSecrets();
+        toast(`บันทึก ${name} แล้ว`);
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    };
+
+    // ---------- AI สร้าง step ----------
+    let aiStatus = null;
+    async function openAi() {
+      aiStatus = await api('/api/ai/status').catch(() => ({ enabled: false }));
+      $('aiSetup').hidden = aiStatus.enabled;
+      $('aiForm').hidden = !aiStatus.enabled;
+      $('aiModel').textContent = aiStatus.enabled ? `· Gemini${aiStatus.model ? ` (${aiStatus.model})` : ''}` : '';
+      $('aiError').hidden = true;
+      $('aiResult').hidden = true;
+      $('aiDialog').showModal();
+      if (aiStatus.enabled) $('aiInstruction').focus();
+    }
+    function setAiBusy(busy) {
+      const b = $('aiGenerate');
+      b.disabled = busy;
+      b.replaceChildren(icon(busy ? 'sync' : 'sparkle-fill', busy ? 'spin' : ''), busy ? ' กำลังให้ AI สร้าง step…' : ' สร้าง step');
+    }
+    $('aiBtn').onclick = openAi;
+    $('closeAi').onclick = () => $('aiDialog').close();
+    document.querySelectorAll('[data-example]').forEach((b) => (b.onclick = () => { $('aiInstruction').value = b.dataset.example; }));
+    $('aiGenerate').onclick = () => {
+      $('aiError').hidden = true;
+      $('aiResult').hidden = true;
+      setAiBusy(true);
+      send({ type: 'aiGenerate', instruction: $('aiInstruction').value });
+    };
+
+    const AI_CHECK = {
+      verified: ['good', 'check', 'พบ element ในหน้านี้'],
+      notFound: ['warn', 'alert', 'ยังไม่พบในหน้านี้ — อาจอยู่หน้าถัดไป ตรวจอีกครั้งหลังรัน'],
+      ambiguous: ['warn', 'alert', 'เจอหลาย element — ควรแก้ locator ให้เจาะจงหลังเพิ่ม'],
+      noLocator: ['good', 'check', 'ไม่ต้องใช้ element'],
+      invalid: ['bad', 'x', 'ใช้ไม่ได้'],
+    };
+    function showAiResult({ model, explanation, items }) {
+      setAiBusy(false);
+      if (model) $('aiModel').textContent = `· Gemini (${model})`;
+      const boxes = [];
+      const list = items.map((it) => {
+        const [kind, ic, text] = AI_CHECK[it.check];
+        const valid = it.check !== 'invalid';
+        const box = el('input', { type: 'checkbox', checked: valid, disabled: !valid, ariaLabel: it.label });
+        if (valid) boxes.push([box, it.index]);
+        const p = it.parts;
+        return el('label', { className: `ai-item${valid ? '' : ' invalid'}` },
+          box,
+          el('span', { className: `step-icon ${p?.group === 'assert' ? 'assert' : ''}` }, icon(ACTION_ICONS[it.action] ?? 'dot-fill')),
+          el('div', {},
+            p ? [el('span', { className: 'verb', style: 'font-weight:600', textContent: p.verb }), ' ',
+                 p.target ? el('span', { className: `chip${p.target.code ? ' code' : ''}`, textContent: p.target.text }) : null,
+                 p.missingTarget ? el('span', { className: 'chip missing', textContent: p.missingTarget }) : null,
+                 p.value ? el('span', { className: 'muted', textContent: ` ${p.value}` }) : null]
+              : el('span', { textContent: it.label }),
+            el('div', { className: `ai-check ${kind}` }, icon(ic), it.error ? `${text}: ${it.error}` : text)));
+      });
+      const addBtn = el('button', { className: 'btn btn-primary' });
+      const refresh = () => {
+        const n = boxes.filter(([b]) => b.checked).length;
+        addBtn.textContent = `เพิ่ม ${n} step ต่อท้ายเทส`;
+        addBtn.disabled = n === 0;
+      };
+      boxes.forEach(([b]) => (b.onchange = refresh));
+      refresh();
+      addBtn.onclick = () => {
+        const indexes = boxes.filter(([b]) => b.checked).map(([, i]) => i);
+        send({ type: 'aiAccept', indexes });
+        $('aiDialog').close();
+        toast(`เพิ่ม ${indexes.length} step จาก AI แล้ว — ลองกดรันเทสเพื่อตรวจ`);
+      };
+      $('aiResult').replaceChildren(
+        explanation ? el('div', { className: 'flash', style: 'margin-bottom:10px' }, icon('sparkle-fill'), el('span', { textContent: explanation })) : null,
+        items.length ? el('div', { style: 'display:grid;gap:6px' }, list) : el('div', { className: 'muted', textContent: 'AI ไม่ได้สร้าง step — ลองอธิบายให้ชัดขึ้น' }),
+        el('div', { className: 'row', style: 'justify-content:flex-end;margin-top:12px' },
+          el('button', { className: 'btn', textContent: 'แก้คำสั่งแล้วสร้างใหม่', onclick: () => { $('aiResult').hidden = true; $('aiInstruction').focus(); } }),
+          addBtn));
+      $('aiResult').hidden = false;
+    }
+
+    // ---------- Export ----------
+    function showExport() {
+      $('exportBody').textContent = exportTab === 'code' ? exportData.code : exportData.json;
+      document.querySelectorAll('.seg button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === exportTab)));
+      if (!$('exportDialog').open) $('exportDialog').showModal();
+    }
+    document.querySelectorAll('.seg button').forEach((b) => (b.onclick = () => { exportTab = b.dataset.tab; showExport(); }));
+    $('copy').onclick = async () => { await navigator.clipboard.writeText($('exportBody').textContent); toast('คัดลอกแล้ว'); };
+    $('download').onclick = () => {
+      const base = ($('testName').value.trim() || 'test').replace(/[^\p{L}\p{N}_-]+/gu, '-');
+      const [name, type] = exportTab === 'code' ? [`${base}.spec.ts`, 'text/plain'] : [`${base}.json`, 'application/json'];
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([$('exportBody').textContent], { type }));
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    };
+    $('closeExport').onclick = () => $('exportDialog').close();
+
+    // ---------- แถบ URL ----------
+    const navigate = () => send({ type: 'navigate', url: urlInput.value.trim() });
+    $('go').onclick = navigate;
+    urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') navigate(); });
+    $('back').onclick = () => send({ type: 'back' });
+    $('forward').onclick = () => send({ type: 'forward' });
+    $('reload').onclick = () => send({ type: 'reload' });
+
+    // ---------- dropdown: เมนูวาดเองแทนเมนูของ OS ที่ไม่ขึ้นใน screencast ----------
+    const menu = $('selectMenu');
+    function openSelect({ x, y, options }) {
+      const r = canvas.getBoundingClientRect();
+      menu.replaceChildren(
+        ...options.map((o) =>
+          el('div', {
+            textContent: o.label || o.value || '(ว่าง)',
+            className: o.selected ? 'sel' : '',
+            onmousedown: (e) => { e.stopPropagation(); e.preventDefault(); closeSelect(); send({ type: 'selectChoose', value: o.value }); },
+          })
+        )
+      );
+      menu.style.left = `${x * (r.width / canvas.width)}px`;
+      menu.style.top = `${y * (r.height / canvas.height)}px`;
+      menu.hidden = false;
+    }
+    function closeSelect() { menu.hidden = true; }
+    document.addEventListener('mousedown', (e) => {
+      if (!menu.hidden && !menu.contains(e.target)) { closeSelect(); send({ type: 'selectCancel' }); }
+    }, true);
+
+    // ---------- เมาส์: แปลงพิกัดบนจอเราเป็นพิกัดใน viewport จริง ----------
+    function toPage(e) {
+      const r = canvas.getBoundingClientRect();
+      return {
+        x: Math.round((e.clientX - r.left) * (canvas.width / r.width)),
+        y: Math.round((e.clientY - r.top) * (canvas.height / r.height)),
+      };
+    }
+    const BUTTONS = ['left', 'middle', 'right'];
+
+    let pendingMove = null;
+    canvas.addEventListener('mousemove', (e) => {
+      // รวม mousemove ให้เหลือ 1 ครั้งต่อเฟรม ไม่ให้ส่งถี่เกินไป
+      if (!pendingMove) requestAnimationFrame(() => { send({ type: 'mousemove', ...pendingMove }); pendingMove = null; });
+      pendingMove = toPage(e);
+    });
+    canvas.addEventListener('mousedown', (e) => {
+      e.preventDefault();
+      ime.focus({ preventScroll: true });
+      send({ type: 'mousedown', button: BUTTONS[e.button] || 'left', ...toPage(e) });
+    });
+    canvas.addEventListener('mouseup', (e) => {
+      send({ type: 'mouseup', button: BUTTONS[e.button] || 'left', ...toPage(e) });
+    });
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      send({ type: 'wheel', deltaX: e.deltaX, deltaY: e.deltaY, ...toPage(e) });
+    }, { passive: false });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    ime.addEventListener('focus', () => wrap.classList.add('focused'));
+    ime.addEventListener('blur', () => wrap.classList.remove('focused'));
+
+    // Esc ยกเลิกโหมดเลือก element / ตรวจสอบ
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && state.mode !== 'interact') {
+        e.preventDefault();
+        send({ type: 'mode', mode: state.mode });
+      }
+    });
+
+    // ---------- คีย์บอร์ด ----------
+    // ตัวอักษรทั่วไปปล่อยให้ textarea รับ แล้วส่งเป็นข้อความ (รองรับภาษาไทย/IME/paste)
+    // ปุ่มพิเศษและคีย์ลัด (Ctrl/Cmd) ส่งเป็น press
+    ime.addEventListener('keydown', (e) => {
+      if (e.isComposing || e.keyCode === 229) return;
+      if (e.key === 'Escape' && state.mode !== 'interact') return; // ให้ตัวจัดการ Esc ด้านบนยกเลิกโหมด
+      const isPaste = (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'v';
+      if (isPaste) return;
+      const special = e.key.length > 1;
+      const withModifier = e.ctrlKey || e.metaKey || e.altKey;
+      if (!special && !withModifier) return;
+      if (['Shift', 'Control', 'Alt', 'Meta', 'CapsLock'].includes(e.key)) return;
+      e.preventDefault();
+      const mods = [];
+      if (e.ctrlKey) mods.push('Control');
+      if (e.altKey) mods.push('Alt');
+      if (e.metaKey) mods.push('Meta');
+      if (e.shiftKey && special) mods.push('Shift');
+      send({ type: 'press', key: [...mods, e.key].join('+') });
+    });
+
+    let composing = false;
+    function flushText() {
+      if (ime.value) send({ type: 'text', text: ime.value });
+      ime.value = '';
+    }
+    ime.addEventListener('compositionstart', () => { composing = true; });
+    ime.addEventListener('compositionend', () => { composing = false; flushText(); });
+    ime.addEventListener('input', () => { if (!composing) flushText(); });
+
+    render();
+  </script>
+</body>
+</html>

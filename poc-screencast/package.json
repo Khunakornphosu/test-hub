@@ -1,0 +1,16 @@
+{
+  "name": "test-studio-poc-screencast",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@primer/css": "^22.3.2",
+    "@primer/octicons": "^19.38.0",
+    "express": "^5.2.1",
+    "playwright": "^1.63.0",
+    "ws": "^8.22.0"
+  }
+}
