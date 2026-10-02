@@ -2,6 +2,7 @@ import { createCipher, type RunStepResult, type Step } from '@test-studio/core';
 import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { openStore, seedIfEmpty, type Store } from '../src/index.js';
+import { resetDb } from './helpers.js';
 
 let store: Store;
 let raw: ReturnType<typeof postgres>;
@@ -11,7 +12,8 @@ const login: Step[] = [
 ];
 const result = (stepId: number, status: RunStepResult['status'], extra: Partial<RunStepResult> = {}): RunStepResult => ({ stepId, label: `step ${stepId}`, status, ms: 5, ...extra });
 
-beforeAll(() => {
+beforeAll(async () => {
+  await resetDb();
   const url = process.env.TEST_DATABASE_URL!;
   store = openStore({ url, cipher: createCipher(null, { SECRET_KEY: 'test-key' }) });
   raw = postgres(url, { max: 1 });
@@ -174,5 +176,20 @@ describe('runs', () => {
     const testId = await store.repos.tests.create(projectId, 'many');
     await Promise.all(Array.from({ length: 55 }, () => store.repos.runs.create({ testId, startedAt: new Date(), durationMs: 1, passed: true, results: [] })));
     expect(await store.repos.runs.list(testId)).toHaveLength(50);
+  });
+});
+
+describe('ลำดับตามเวลาที่รัน (ไม่ใช่ลำดับที่ใส่แถว)', () => {
+  it('ข้อมูลที่ใส่ย้อนหลังยังเรียงถูกใน ประวัติ, ผลล่าสุด และ recentResults', async () => {
+    const projectId = await store.repos.projects.create('order');
+    const testId = await store.repos.tests.create(projectId, 'o');
+    const at = (iso: string) => new Date(iso);
+    // ใส่การรัน "ใหม่" ก่อน แล้วค่อยใส่การรัน "เก่า" ภายหลัง (เหมือนนำเข้าข้อมูลย้อนหลัง)
+    const newer = await store.repos.runs.create({ testId, startedAt: at('2026-10-02T10:00:00Z'), durationMs: 1, passed: false, results: [result(2, 'failed')] });
+    const older = await store.repos.runs.create({ testId, startedAt: at('2026-09-01T10:00:00Z'), durationMs: 1, passed: true, results: [result(1, 'passed')] });
+    expect((await store.repos.runs.list(testId)).map((r) => r.id)).toEqual([newer, older]);
+    expect((await store.repos.runs.recentResults(testId)).map((r) => r[0]!.stepId)).toEqual([2, 1]);
+    expect((await store.repos.tests.list(projectId))[0]!.lastPassed).toBe(false); // ล่าสุดตามเวลาคือครั้งที่พัง
+    expect((await store.repos.runs.listRecent({ projectId })).map((r) => r.id)).toEqual([newer, older]);
   });
 });

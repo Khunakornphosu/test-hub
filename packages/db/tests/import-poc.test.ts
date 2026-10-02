@@ -3,9 +3,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { createCipher } from '@test-studio/core';
-import postgres from 'postgres';
 import { afterAll, describe, expect, it } from 'vitest';
 import { importPoc, openStore } from '../src/index.js';
+import { resetDb } from './helpers.js';
 
 const dirs: string[] = [];
 afterAll(() => dirs.forEach((d) => fs.rmSync(d, { recursive: true, force: true })));
@@ -38,9 +38,7 @@ function makePoc() {
 describe('importPoc', () => {
   it('ย้ายข้อมูลโดยคง id เดิม เข้ารหัสตัวแปรลับใหม่ และข้ามเทสที่ step ผิดรูปแบบ', async () => {
     // ล้างตารางของ DB เทส (ไฟล์เทสรันทีละไฟล์ ดู vitest.config.ts) แล้วรีเซ็ต sequence ให้เหมือนฐานข้อมูลใหม่
-    const raw = postgres(process.env.TEST_DATABASE_URL!, { max: 1 });
-    await raw.unsafe('truncate projects, tests, secrets, runs restart identity cascade');
-    await raw.end();
+    await resetDb();
     const store = openStore({ url: process.env.TEST_DATABASE_URL, cipher: createCipher(null, { SECRET_KEY: 'new-system-key' }), max: 1 });
     try {
       const report = await importPoc(store, makePoc());

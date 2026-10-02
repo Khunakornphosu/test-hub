@@ -4,6 +4,7 @@ import {
   ACTIONS,
   LOCATOR_TYPES,
   VIEWPORT,
+  aiStatus,
   blankStep,
   describeParts,
   describeStep,
@@ -93,7 +94,7 @@ export class Session {
   start(): void {
     this.enqueue(async () => {
       await this.openBrowserContext();
-      this.send({ type: 'ready', viewport: VIEWPORT, actions: ACTIONS, locatorTypes: LOCATOR_TYPES });
+      this.send({ type: 'ready', viewport: VIEWPORT, actions: ACTIONS, locatorTypes: LOCATOR_TYPES, ai: aiStatus() });
       await this.sendState();
     });
   }

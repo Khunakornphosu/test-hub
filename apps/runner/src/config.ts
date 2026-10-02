@@ -5,6 +5,8 @@ const bool = z.enum(['true', 'false', '1', '0', '']).transform((v) => v === 'tru
 
 const envSchema = z.object({
   PORT: z.coerce.number().int().positive().default(4800),
+  /** พอร์ตของหน้าเว็บ (ถ้าเสิร์ฟหน้า demo ของระบบ) runner จะอนุญาตให้เบราว์เซอร์เปิดเฉพาะ /demo-*.html ที่พอร์ตนี้ ค่าเริ่มต้น = PORT */
+  APP_PORT: z.coerce.number().int().positive().optional(),
   /** ค่าเริ่มต้นฟังเฉพาะเครื่องนี้ ถ้าเปิดให้เครือข่ายอื่นเข้า (0.0.0.0) ต้องตั้ง RUNNER_TOKEN_SECRET */
   HOST: z.string().default('127.0.0.1'),
   DATABASE_URL: z.string().min(1, 'ต้องตั้ง DATABASE_URL'),
@@ -20,6 +22,7 @@ const envSchema = z.object({
 
 export interface RunnerConfig {
   port: number;
+  appPort: number;
   host: string;
   databaseUrl: string;
   secretKey: string;
@@ -43,6 +46,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   }
   return {
     port: e.PORT,
+    appPort: e.APP_PORT ?? e.PORT,
     host: e.HOST,
     databaseUrl: e.DATABASE_URL,
     secretKey: e.SECRET_KEY,

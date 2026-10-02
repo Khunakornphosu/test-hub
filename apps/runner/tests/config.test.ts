@@ -8,11 +8,12 @@ const base = { DATABASE_URL: 'postgres://x', SECRET_KEY: 'a-long-enough-key' };
 
 describe('loadConfig', () => {
   it('ใช้ค่าเริ่มต้นที่ปลอดภัย: ฟังเฉพาะเครื่องตัวเองและจำกัด session', () => {
-    expect(loadConfig(base)).toMatchObject({ port: 4800, host: '127.0.0.1', tokenSecret: '', allowedOrigins: [], maxSessions: 4, runMigrations: false });
+    expect(loadConfig(base)).toMatchObject({ port: 4800, appPort: 4800, host: '127.0.0.1', tokenSecret: '', allowedOrigins: [], maxSessions: 4, runMigrations: false });
   });
 
   it('แยกค่า ALLOWED_ORIGINS และอ่านค่า boolean/ตัวเลข', () => {
     const c = loadConfig({ ...base, ALLOWED_ORIGINS: 'https://a.app, https://b.app/ ,', MAX_SESSIONS: '9', RUN_MIGRATIONS: 'true', PORT: '5000' });
+    expect(loadConfig({ ...base, APP_PORT: '3000' }).appPort).toBe(3000);
     expect(c).toMatchObject({ allowedOrigins: ['https://a.app', 'https://b.app/'], maxSessions: 9, runMigrations: true, port: 5000 });
   });
 

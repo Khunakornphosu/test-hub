@@ -15,8 +15,6 @@ const MAX_BUFFERED_BYTES = 2_000_000;
 export interface RunnerOptions {
   store: Store;
   config: RunnerConfig;
-  /** พอร์ตของระบบเอง (เพื่ออนุญาตเฉพาะหน้า demo ใน URL guard) ค่าเริ่มต้น = config.port */
-  appPort?: number;
   /** ค่าตั้งของ URL guard (ALLOWED_HOSTS, ALLOW_PRIVATE_NETWORK) ค่าเริ่มต้น = process.env */
   guardEnv?: Record<string, string | undefined>;
 }
@@ -68,9 +66,9 @@ export function authorizeUpgrade(req: IncomingMessage, config: RunnerConfig, ses
   return { ok: true, user };
 }
 
-export async function createRunner({ store, config, appPort = config.port, guardEnv = process.env }: RunnerOptions): Promise<Runner> {
+export async function createRunner({ store, config, guardEnv = process.env }: RunnerOptions): Promise<Runner> {
   // ทุก request ของเบราว์เซอร์ผ่าน proxy ที่กันการเข้าถึงเครือข่ายภายใน (SSRF)
-  const urlGuard = createUrlGuard({ appPort, env: guardEnv });
+  const urlGuard = createUrlGuard({ appPort: config.appPort, env: guardEnv });
   const guardProxy = await startGuardProxy(urlGuard);
   // --disable-dev-shm-usage: /dev/shm ใน container มักเล็กเกินไปจน Chromium ล่ม
   const browser: Browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'], ...guardProxy.launchOptions });

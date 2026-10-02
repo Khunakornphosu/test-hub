@@ -1,4 +1,5 @@
 import { desc, eq, sql } from 'drizzle-orm';
+import { tests } from '../schema.js';
 import { runResultsSchema, type RunStepResult } from '@test-studio/core';
 import type { Db } from '../client.js';
 import { runs } from '../schema.js';
@@ -18,6 +19,12 @@ export interface RunSummary {
   durationMs: number;
   passed: boolean;
   hasScreenshot: boolean;
+}
+
+export interface RecentRun extends RunSummary {
+  testId: number;
+  testName: string;
+  projectId: number;
 }
 
 export interface RunDetail extends RunSummary {
@@ -51,11 +58,20 @@ export function runsRepo(db: Db) {
     },
     /** ประวัติล่าสุดของเทส (ใหม่สุดก่อน สูงสุด 50) */
     async list(testId: number): Promise<RunSummary[]> {
-      return db.select(summaryColumns).from(runs).where(eq(runs.testId, testId)).orderBy(desc(runs.id)).limit(50);
+      return db.select(summaryColumns).from(runs).where(eq(runs.testId, testId)).orderBy(desc(runs.startedAt), desc(runs.id)).limit(50);
     },
     async get(id: number): Promise<RunDetail | null> {
       const [row] = await db.select({ ...summaryColumns, testId: runs.testId, results: runs.results }).from(runs).where(eq(runs.id, id));
       return row ?? null;
+    },
+    /** การรันล่าสุดของทุกเทส (หรือเฉพาะโปรเจกต์) ใหม่สุดก่อน */
+    async listRecent(options: { projectId?: number; limit?: number } = {}): Promise<RecentRun[]> {
+      const query = db
+        .select({ ...summaryColumns, testId: runs.testId, testName: tests.name, projectId: tests.projectId })
+        .from(runs)
+        .innerJoin(tests, eq(tests.id, runs.testId));
+      const filtered = options.projectId != null ? query.where(eq(tests.projectId, options.projectId)) : query;
+      return filtered.orderBy(desc(runs.startedAt), desc(runs.id)).limit(Math.min(options.limit ?? 50, 200));
     },
     async screenshot(id: number): Promise<Buffer | null> {
       const [row] = await db.select({ screenshot: runs.screenshot }).from(runs).where(eq(runs.id, id));
@@ -63,7 +79,7 @@ export function runsRepo(db: Db) {
     },
     /** ผลรายสเต็ปของการรันล่าสุด ใช้คำนวณ locator health */
     async recentResults(testId: number, limit = 20): Promise<RunStepResult[][]> {
-      const rows = await db.select({ results: runs.results }).from(runs).where(eq(runs.testId, testId)).orderBy(desc(runs.id)).limit(limit);
+      const rows = await db.select({ results: runs.results }).from(runs).where(eq(runs.testId, testId)).orderBy(desc(runs.startedAt), desc(runs.id)).limit(limit);
       return rows.map((r) => r.results);
     },
   };

@@ -5,12 +5,30 @@
   "type": "module",
   "description": "Logic ร่วมของ Test Studio: schema ของ step, แปลงเป็นโค้ด/คำอธิบาย, รันด้วย Playwright, self-healing, AI, ความปลอดภัย",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
-    "./steps": { "types": "./dist/steps/index.d.ts", "default": "./dist/steps/index.js" },
-    "./ai": { "types": "./dist/ai/index.d.ts", "default": "./dist/ai/index.js" },
-    "./security": { "types": "./dist/security/index.d.ts", "default": "./dist/security/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./steps": {
+      "types": "./dist/steps/index.d.ts",
+      "default": "./dist/steps/index.js"
+    },
+    "./ai": {
+      "types": "./dist/ai/index.d.ts",
+      "default": "./dist/ai/index.js"
+    },
+    "./security": {
+      "types": "./dist/security/index.d.ts",
+      "default": "./dist/security/index.js"
+    },
+    "./client": {
+      "types": "./dist/client.d.ts",
+      "default": "./dist/client.js"
+    }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",

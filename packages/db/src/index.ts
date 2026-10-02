@@ -3,6 +3,7 @@ import { createDb, type Db, type DbHandle } from './client.js';
 import { projectsRepo } from './repos/projects.js';
 import { runsRepo } from './repos/runs.js';
 import { secretsRepo } from './repos/secrets.js';
+import { statsRepo } from './repos/stats.js';
 import { testsRepo } from './repos/tests.js';
 
 export * from './schema.js';
@@ -11,10 +12,12 @@ export * from './migrate.js';
 export { importPoc, type ImportReport } from './import-poc.js';
 export type { Project } from './repos/projects.js';
 export type { TestRecord, TestSummary } from './repos/tests.js';
-export type { NewRun, RunDetail, RunSummary } from './repos/runs.js';
+export type { NewRun, RecentRun, RunDetail, RunSummary } from './repos/runs.js';
+export type { BucketPoint, FailureItem, Overview, StatsQuery, TimelineState } from './repos/stats.js';
+export { chooseBucketMs } from './repos/stats.js';
 
 export function createRepos(db: Db, cipher: Cipher) {
-  return { projects: projectsRepo(db), tests: testsRepo(db), secrets: secretsRepo(db, cipher), runs: runsRepo(db) };
+  return { projects: projectsRepo(db), tests: testsRepo(db), secrets: secretsRepo(db, cipher), runs: runsRepo(db), stats: statsRepo(db) };
 }
 export type Repos = ReturnType<typeof createRepos>;
 

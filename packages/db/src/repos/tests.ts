@@ -31,7 +31,7 @@ export function testsRepo(db: Db) {
           updatedAt: tests.updatedAt,
           stepCount: sql<number>`jsonb_array_length(${tests.steps})::int`,
           // ต้องระบุชื่อตารางเอง: Drizzle เขียน ${tests.id} ใน subquery เป็น "id" เฉยๆ ซึ่งจะไปชี้ที่ runs.id แทน
-          lastPassed: sql<boolean | null>`(select r.passed from ${runs} r where r.test_id = "tests"."id" order by r.id desc limit 1)`,
+          lastPassed: sql<boolean | null>`(select r.passed from ${runs} r where r.test_id = "tests"."id" order by r.started_at desc, r.id desc limit 1)`,
         })
         .from(tests)
         .where(eq(tests.projectId, projectId))

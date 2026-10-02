@@ -85,7 +85,14 @@ export interface AiItem {
 }
 
 export type ServerMessage =
-  | { type: 'ready'; viewport: typeof VIEWPORT; actions: Record<ActionName, ActionSpec>; locatorTypes: typeof LOCATOR_TYPES }
+  | {
+      type: 'ready';
+      viewport: typeof VIEWPORT;
+      actions: Record<ActionName, ActionSpec>;
+      locatorTypes: typeof LOCATOR_TYPES;
+      /** สถานะ AI ของ runner (ไม่มีค่าลับ) */
+      ai?: { enabled: boolean; provider: string; model: string | null };
+    }
   | { type: 'frame'; data: string }
   | { type: 'url'; url: string }
   | { type: 'state'; testId: number | null; recording: boolean; mode: Mode; running: boolean; health: Record<number, Health>; steps: StepView[] }
