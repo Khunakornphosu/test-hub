@@ -8,6 +8,9 @@ import { test } from './helpers.js';
 import { APP, AUTH_APP } from '../playwright.config.js';
 import { createUrlGuard, startGuardProxy } from '../security.js';
 
+// ฟีเจอร์เฉพาะของ PoC เดิม (รหัสผ่านเดียว, ตรวจ Host ของ express) ระบบใหม่ใช้ token/Google login แทน
+const RUNNER = process.env.POC_BACKEND === 'runner';
+
 const port = (url) => new URL(url).port;
 
 // request ด้วย Host header ที่กำหนดเอง (fetch ของ Node ไม่ให้แก้ Host)
@@ -37,6 +40,7 @@ function wsConnect(url, headers) {
 
 base.describe('Host และ Origin', () => {
   base('Host header แปลกปลอมถูกปฏิเสธ (กัน DNS rebinding)', async () => {
+    base.skip(RUNNER, 'ตรวจ Host ของ HTTP เป็นของ PoC เดิม (runner ตรวจ Host ตอนเปิด WebSocket)');
     expect(await rawGet(`${APP}/api/projects`, { Host: 'evil.example' })).toBe(421);
     expect(await rawGet(`${APP}/api/projects`, { Host: `localhost:${port(APP)}` })).toBe(200);
   });
@@ -104,6 +108,7 @@ test.describe('SSRF', () => {
 });
 
 base.describe('APP_PASSWORD', () => {
+  base.skip(RUNNER, 'รหัสผ่านเดียวเป็นของ PoC เดิม');
   base.use({ baseURL: AUTH_APP });
 
   base('ต้องล็อกอินก่อนใช้งาน และหน้า demo ยังเปิดได้', async ({ page, request }) => {
@@ -136,6 +141,7 @@ base.describe('APP_PASSWORD', () => {
 });
 
 base('เปิดให้เครื่องอื่นเข้าถึง (HOST=0.0.0.0) โดยไม่ตั้ง APP_PASSWORD ต้องไม่ยอมเริ่มทำงาน', async () => {
+  base.skip(RUNNER, 'ทดสอบ server.js ของ PoC เดิม (ของ runner ดู apps/runner/tests/config.test.ts)');
   const child = spawn('node', ['server.js'], {
     env: { ...process.env, ENV_FILE: 'none', HOST: '0.0.0.0', PORT: '4450', DB_PATH: ':memory:', APP_PASSWORD: '' },
   });

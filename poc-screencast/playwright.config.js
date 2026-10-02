@@ -24,7 +24,25 @@ export default defineConfig({
     viewport: { width: 1600, height: 960 },
     trace: 'retain-on-failure',
   },
-  webServer: [
+  // POC_BACKEND=runner: ใช้ runner + Postgres ใหม่ (apps/runner) แทน server.js เดิม เพื่อพิสูจน์ว่าทำงานเหมือนกัน
+  // (ต้องเปิด Postgres ก่อน: docker compose up -d db) เทสที่เป็นฟีเจอร์เฉพาะของ PoC เดิมจะถูกข้าม
+  webServer: process.env.POC_BACKEND === 'runner' ? [
+    { command: 'node tests/mock-gemini.mjs', url: `${MOCK_GEMINI}/__requests`, env: { PORT: '4319' } },
+    {
+      command: 'npm run dev:poc-host',
+      cwd: '../apps/runner',
+      url: `${APP}/api/auth`,
+      timeout: 120_000,
+      env: {
+        PORT: '4310',
+        DATABASE_URL: 'postgres://test_studio:test_studio@127.0.0.1:5433/test_studio_poc',
+        RESET_DB: 'true',
+        SECRET_KEY: 'test-secret-key',
+        GEMINI_API_KEY: 'test-key',
+        GEMINI_API_BASE: `${MOCK_GEMINI}/v1beta`,
+      },
+    },
+  ] : [
     {
       command: 'node tests/mock-gemini.mjs',
       url: `${MOCK_GEMINI}/__requests`,

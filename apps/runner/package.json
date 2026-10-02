@@ -1,0 +1,30 @@
+{
+  "name": "@test-studio/runner",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "\u0e1a\u0e23\u0e34\u0e01\u0e32\u0e23\u0e17\u0e35\u0e48\u0e40\u0e1b\u0e34\u0e14 Chromium: screencast \u0e43\u0e2b\u0e49\u0e2b\u0e19\u0e49\u0e32\u0e40\u0e27\u0e47\u0e1a, \u0e1a\u0e31\u0e19\u0e17\u0e36\u0e01 step \u0e08\u0e32\u0e01\u0e01\u0e32\u0e23\u0e43\u0e0a\u0e49\u0e07\u0e32\u0e19, \u0e23\u0e31\u0e19\u0e40\u0e17\u0e2a (WebSocket)",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.dev.json",
+    "start": "node dist/main.js",
+    "dev": "tsx watch src/main.ts",
+    "dev:poc-host": "tsx dev/poc-host.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@test-studio/core": "*",
+    "@test-studio/db": "*",
+    "playwright": "^1.63.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/ws": "^8.5.0",
+    "express": "^5.1.0",
+    "@types/express": "^5.0.0",
+    "tsx": "^4.0.0",
+    "vitest": "^5.0.0",
+    "postgres": "^3.4.0"
+  }
+}

@@ -39,3 +39,4 @@ export async function seedIfEmpty(repos: Repos): Promise<void> {
   const projectId = await repos.projects.create('โปรเจกต์ตัวอย่าง');
   await repos.tests.create(projectId, 'Login Test');
 }
+export { sql } from 'drizzle-orm';

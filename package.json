@@ -3,12 +3,25 @@
   "private": true,
   "type": "module",
   "description": "Test Studio monorepo: apps/web (Next.js + Grafana UI), packages/core (shared logic). poc-screencast คือต้นแบบเดิม ยังรันแยกต่างหาก",
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
+    "db:up": "docker compose up -d db",
+    "db:migrate": "npm run migrate -w @test-studio/db",
+    "build": "npm run build -w @test-studio/core && npm run build -w @test-studio/db && npm run build -w @test-studio/runner",
     "build:core": "npm run build -w @test-studio/core",
-    "test:core": "npm test -w @test-studio/core",
+    "build:web": "npm run build -w @test-studio/web",
     "dev:web": "npm run dev -w @test-studio/web",
-    "build:web": "npm run build -w @test-studio/web"
+    "dev:runner": "npm run dev -w @test-studio/runner",
+    "typecheck": "npm run typecheck -w @test-studio/core && npm run typecheck -w @test-studio/db && npm run typecheck -w @test-studio/runner",
+    "test:core": "npm test -w @test-studio/core",
+    "test:db": "npm test -w @test-studio/db",
+    "test:runner": "npm test -w @test-studio/runner",
+    "test": "npm run build && npm run test:core && npm run test:db && npm run test:runner",
+    "test:poc": "cd poc-screencast && npm test",
+    "test:poc-on-runner": "cd poc-screencast && POC_BACKEND=runner npm test"
   },
   "devDependencies": {
     "typescript": "^5.9.0"
