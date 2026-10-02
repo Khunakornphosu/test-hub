@@ -1,5 +1,5 @@
 {
-  "name": "test-studio-web-prototype",
+  "name": "@test-studio/web",
   "version": "0.1.0",
   "private": true,
   "scripts": {

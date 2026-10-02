@@ -1,0 +1,16 @@
+{
+  "name": "test-studio",
+  "private": true,
+  "type": "module",
+  "description": "Test Studio monorepo: apps/web (Next.js + Grafana UI), packages/core (shared logic). poc-screencast คือต้นแบบเดิม ยังรันแยกต่างหาก",
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "build:core": "npm run build -w @test-studio/core",
+    "test:core": "npm test -w @test-studio/core",
+    "dev:web": "npm run dev -w @test-studio/web",
+    "build:web": "npm run build -w @test-studio/web"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.0"
+  }
+}
