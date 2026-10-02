@@ -1,4 +1,5 @@
 'use client';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { createTheme } from '@grafana/data';
 import { GlobalStyles, ThemeContext } from '@grafana/ui';
@@ -9,6 +10,7 @@ export const useGMode = () => useContext(ModeCtx);
 
 // หน้าตาเหมือน Grafana: ธีมและ component มาจาก @grafana/ui ตรงๆ
 export default function GProviders({ children }: { children: ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient({ defaultOptions: { queries: { staleTime: 5_000, retry: 1, refetchOnWindowFocus: false } } }));
   const [mode, setMode] = useState<Mode>('dark');
   useEffect(() => {
     try {
@@ -29,7 +31,7 @@ export default function GProviders({ children }: { children: ReactNode }) {
     <ModeCtx.Provider value={{ mode, toggle }}>
       <ThemeContext.Provider value={theme}>
         <GlobalStyles />
-        {children}
+        <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
       </ThemeContext.Provider>
     </ModeCtx.Provider>
   );
