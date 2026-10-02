@@ -1,193 +1,155 @@
 'use client';
-import { useState } from 'react';
-import { css, cx } from '@emotion/css';
-import type { GrafanaTheme2, SelectableValue } from '@grafana/data';
-import { Alert, Badge, Button, CollapsableSection, Field, Icon, IconButton, Input, PanelChrome, RadioButtonGroup, Select, Tab, TabsBar, ToolbarButton, useStyles2, type IconName } from '@grafana/ui';
-import { steps } from '@/lib/data';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { css } from '@emotion/css';
+import type { GrafanaTheme2 } from '@grafana/data';
+import { Alert, Badge, Button, Field, Icon, IconButton, Input, Modal, PanelChrome, RadioButtonGroup, Select, TextArea, useStyles2 } from '@grafana/ui';
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type { ActionName, Locator, Mode, ServerMessage, Step } from '@test-studio/core/client';
+import BrowserView, { type SelectMenu } from './BrowserView';
+import { api, type TestSummary } from '@/lib/api';
+import { useRunner } from '@/lib/runner';
 
-type Mode = 'idle' | 'record' | 'pick' | 'assert';
-const ICONS: Record<string, IconName> = { open: 'link', type: 'pen', select: 'list-ui-alt', click: 'bolt', text: 'align-left', url: 'link' };
-const modeOptions: SelectableValue<Mode>[] = [
-  { label: 'บันทึก', value: 'record', icon: 'circle' },
-  { label: 'เลือก element', value: 'pick', icon: 'search-plus' },
-  { label: 'ตรวจสอบ', value: 'assert', icon: 'check-circle' },
-];
-const actionOptions: SelectableValue<string>[] = [
-  { label: 'คลิก', value: 'click', icon: 'bolt' },
-  { label: 'พิมพ์ข้อความ', value: 'fill', icon: 'pen' },
-  { label: 'เลือกจาก dropdown', value: 'select', icon: 'list-ui-alt' },
-  { label: 'ตรวจข้อความ', value: 'assertText', icon: 'align-left' },
-];
-
-const banners: Record<Mode, { severity: 'info' | 'error' | 'warning' | 'success'; title: string }> = {
-  idle: { severity: 'info', title: 'พร้อมใช้งาน — กด "รัน" เพื่อทดสอบ หรือ "บันทึก" เพื่อเพิ่ม step ต่อท้าย' },
-  record: { severity: 'error', title: 'กำลังบันทึก — ทุกการคลิกและพิมพ์ในหน้าเว็บจะกลายเป็น step' },
-  pick: { severity: 'warning', title: 'คลิก element ในหน้าเว็บ เพื่อใช้กับ step ที่กำลังแก้ไข' },
-  assert: { severity: 'success', title: 'คลิกข้อความหรือ element ที่ต้องการตรวจ' },
-};
+const labels: Record<Mode, string> = { interact: 'โต้ตอบ', pick: 'เลือก element', assertVisible: 'ตรวจการแสดงผล', assertText: 'ตรวจข้อความ', assertURL: 'ตรวจ URL' };
+const modes = (Object.keys(labels) as Mode[]).map((value) => ({ value, label: labels[value] }));
+const locatorLabel = (l: Locator | null) => !l ? 'ยังไม่ได้เลือก element' : l.type === 'role' ? `${l.role}${l.name ? `: ${l.name}` : ''}` : `${l.type}: ${l.value}`;
 
 export default function Workspace() {
   const s = useStyles2(styles);
-  const [mode, setMode] = useState<Mode>('idle');
-  const [selected, setSelected] = useState(5);
-  const [tab, setTab] = useState<'steps' | 'runs'>('steps');
-  const sel = steps.find((x) => x.id === selected)!;
-  const banner = banners[mode];
+  const [testId, setTestId] = useState<number | null>(null);
+  const [testName, setTestName] = useState('');
+  const [otherTests, setOtherTests] = useState<TestSummary[]>([]);
+  const [nameDraft, setNameDraft] = useState('');
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [mode, setMode] = useState<Mode>('interact');
+  const [address, setAddress] = useState('');
+  const [message, setMessage] = useState('');
+  const [selectMenu, setSelectMenu] = useState<SelectMenu | null>(null);
+  const [picked, setPicked] = useState<Locator | null>(null);
+  const [locatorResult, setLocatorResult] = useState('');
+  const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
+  const [secretValue, setSecretValue] = useState('');
+  const [dialog, setDialog] = useState<'ai' | 'export' | null>(null);
+  const [aiText, setAiText] = useState('');
+  const [aiResult, setAiResult] = useState<Extract<ServerMessage, { type: 'aiResult' }> | null>(null);
+  const [exportResult, setExportResult] = useState<Extract<ServerMessage, { type: 'export' }> | null>(null);
+  const [frameDraw, setFrameDraw] = useState<(data: string) => void>(() => () => {});
+  const registerFrame = useCallback((draw: (data: string) => void) => setFrameDraw(() => draw), []);
+  const [viewport, setViewport] = useState({ width: 1280, height: 720 });
 
-  return (
-    <div className={s.page}>
-      <div className={s.toolbar}>
-        <IconButton name="arrow-left" tooltip="กลับไปรายการเทส" aria-label="กลับไปรายการเทส" size="lg" />
-        <Input className={s.titleInput} defaultValue="Login ด้วยอีเมล" aria-label="ชื่อเทส" />
-        <Badge color="green" icon="check-circle" text="รันล่าสุดผ่าน · 5 นาทีที่แล้ว" />
-        <div className={s.spacer} />
-        <RadioButtonGroup<Mode> options={modeOptions} value={mode === 'idle' ? undefined : mode} onChange={(v) => setMode(mode === v ? 'idle' : v)} size="md" />
-        <ToolbarButton icon="bolt" variant="default">AI</ToolbarButton>
-        <Button variant="secondary" icon="save">บันทึก</Button>
-        <Button variant="primary" icon="play">รัน</Button>
-      </div>
-
-      <div className={s.body}>
-        {/* ซ้าย: รายการ step (แบบ Queries/Transformations ของ Grafana) */}
-        <div className={s.left}>
-          <TabsBar>
-            <Tab label="Steps" counter={steps.length} active={tab === 'steps'} onChangeTab={() => setTab('steps')} />
-            <Tab label="ผลการรัน" counter={20} active={tab === 'runs'} onChangeTab={() => setTab('runs')} />
-          </TabsBar>
-          <div className={s.steps}>
-            {steps.map((st, i) => (
-              <button key={st.id} className={cx(s.step, st.id === selected && s.stepActive)} onClick={() => setSelected(st.id)}>
-                <span className={s.num}>{i + 1}</span>
-                <span className={cx(s.stepIcon, st.kind === 'assert' && s.stepIconAssert)}><Icon name={ICONS[st.icon] ?? 'bolt'} size="sm" /></span>
-                <span className={s.stepText}>
-                  <b>{st.verb}</b> <code className={s.chip}>{st.target}</code>
-                  {st.value && <span className={s.muted}> {st.value}</span>}
-                  {st.healed && <span className={s.healed}><Icon name="sync" size="xs" /> ซ่อมอัตโนมัติ — รอยืนยัน</span>}
-                </span>
-              </button>
-            ))}
-            <button className={s.add}><Icon name="plus" /> เพิ่ม step หรือใช้เทสอื่นซ้ำ (block)</button>
-          </div>
-        </div>
-
-        {/* กลาง: หน้าเว็บ */}
-        <div className={s.center}>
-          <div className={s.noGrow}>
-            <Alert severity={banner.severity} title={banner.title} className={s.alert} topSpacing={0} bottomSpacing={0} onRemove={mode === 'idle' ? undefined : () => setMode('idle')} />
-          </div>
-          <div className={s.urlbar}>
-            <IconButton name="arrow-left" aria-label="ย้อนกลับ" tooltip="ย้อนกลับ" />
-            <IconButton name="arrow-right" aria-label="ไปข้างหน้า" tooltip="ไปข้างหน้า" />
-            <IconButton name="sync" aria-label="โหลดใหม่" tooltip="โหลดใหม่" />
-            <Input defaultValue="https://shop.example.com/login" aria-label="URL" className={s.urlInput} />
-            <Button variant="secondary">เปิด</Button>
-          </div>
-          <div className={cx(s.browser, mode !== 'idle' && s[`ring_${mode}` as 'ring_record'])}>
-            <MockPage highlightButton={mode === 'pick'} />
-          </div>
-        </div>
-
-        {/* ขวา: ตัวเลือกของ step (แบบ Options pane) */}
-        <div className={s.right}>
-          <PanelChrome title={`แก้ไข step ${steps.findIndex((x) => x.id === selected) + 1}`} padding="none">
-            <div className={s.options}>
-              <CollapsableSection label="การกระทำ" isOpen>
-                <Field label="ทำอะไร"><Select options={actionOptions} value={sel.verb === 'คลิก' ? 'click' : sel.verb === 'พิมพ์' ? 'fill' : sel.verb === 'เลือก' ? 'select' : 'assertText'} onChange={() => {}} /></Field>
-                <Field label="กับ element ไหน" description="คลิก “เลือกใหม่จากหน้าเว็บ” แล้วชี้ที่ element ที่ต้องการ">
-                  <div className={s.target}>
-                    <code className={s.chip}>{sel.target}</code>
-                    <span className={s.ok}><Icon name="check-circle" size="sm" /> พบ 1 ตัวในหน้านี้ (ไฮไลต์สีเหลือง)</span>
-                    <div className={s.row}>
-                      <Button size="sm" variant="secondary" icon="search-plus" onClick={() => setMode('pick')}>เลือกใหม่จากหน้าเว็บ</Button>
-                      <Button size="sm" variant="secondary">ทดสอบ</Button>
-                    </div>
-                  </div>
-                </Field>
-                {sel.value && <Field label="ค่า"><Input defaultValue={sel.value.replace(/"/g, '')} /></Field>}
-              </CollapsableSection>
-
-              {sel.healed && (
-                <CollapsableSection label="ซ่อมอัตโนมัติ" isOpen>
-                  <Alert severity="warning" title="ซ่อมอัตโนมัติในการรันล่าสุด" topSpacing={0}>
-                    locator เดิมหาไม่เจอ ระบบใช้ <b>CSS: #f &gt; button</b> แทน
-                    <div className={s.row} style={{ marginTop: 8 }}><Button size="sm" variant="primary" fill="outline">ใช้ locator ใหม่</Button></div>
-                  </Alert>
-                </CollapsableSection>
-              )}
-
-              <CollapsableSection label="ขั้นสูง: แก้ locator เอง" isOpen={false}>
-                <Field label="ประเภท"><Select options={[{ label: 'Role', value: 'role' }, { label: 'Label', value: 'label' }, { label: 'CSS', value: 'css' }]} value="role" onChange={() => {}} /></Field>
-                <Field label="ค่า"><Input placeholder="button / เข้าสู่ระบบ" /></Field>
-              </CollapsableSection>
-
-              <CollapsableSection label="ประวัติ step นี้" isOpen>
-                <div className={s.history}>{'pppppppppppphpppppppp'.split('').map((c, i) => <i key={i} className={c === 'p' ? s.hOk : s.hWarn} />)}</div>
-                <div className={s.muted}>20 การรันล่าสุด · ซ่อมอัตโนมัติ 1 ครั้ง</div>
-              </CollapsableSection>
-              <div className={s.footer}>
-                <Button variant="secondary">ยกเลิก</Button>
-                <Button variant="primary">บันทึก step</Button>
-              </div>
-            </div>
-          </PanelChrome>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// หน้าเว็บจำลองแทน screencast จริง (ใช้สีของตัวเอง เพราะเป็นเว็บของคนอื่นที่กำลังทดสอบ)
-function MockPage({ highlightButton }: { highlightButton: boolean }) {
-  const field: React.CSSProperties = { border: '1px solid #ccc', borderRadius: 4, padding: '8px 10px', fontSize: 14, color: '#1f2328', background: '#fff' };
-  return (
-    <div style={{ background: '#f3f4f8', color: '#1f2328', height: '100%', display: 'grid', placeItems: 'center', fontFamily: 'system-ui, sans-serif' }}>
-      <div style={{ background: '#fff', borderRadius: 8, padding: 32, width: 340, boxShadow: '0 4px 16px rgba(0,0,0,.1)', display: 'grid', gap: 12 }}>
-        <div style={{ fontSize: 20, fontWeight: 600 }}>เข้าสู่ระบบ</div>
-        <div style={{ display: 'grid', gap: 4 }}><span style={{ fontSize: 13 }}>อีเมล</span><div style={field}>somchai@test.com</div></div>
-        <div style={{ display: 'grid', gap: 4 }}><span style={{ fontSize: 13 }}>รหัสผ่าน</span><div style={field}>••••••••</div></div>
-        <div style={{ background: '#3557e0', color: '#fff', textAlign: 'center', padding: '9px 0', borderRadius: 4, fontSize: 14, fontWeight: 500, ...(highlightButton ? { outline: '2px solid #ff9830', outlineOffset: 2, boxShadow: '0 0 0 6px rgba(255,152,48,0.25)' } : {}) }}>เข้าสู่ระบบ</div>
-      </div>
-    </div>
-  );
-}
-
-const styles = (theme: GrafanaTheme2) => {
-  const ring = (c: string) => css({ outline: `2px solid ${c}`, outlineOffset: 1 });
-  return {
-    page: css({ height: '100%', display: 'grid', gridTemplateRows: 'auto 1fr', minHeight: 0 }),
-    toolbar: css({ display: 'flex', alignItems: 'center', gap: theme.spacing(1.5), padding: theme.spacing(1, 2), background: theme.colors.background.primary, borderBottom: `1px solid ${theme.colors.border.weak}` }),
-    titleInput: css({ width: 240, input: { fontWeight: theme.typography.fontWeightMedium } }),
-    spacer: css({ flex: 1 }),
-    body: css({ display: 'grid', gridTemplateColumns: '320px minmax(0, 1fr) 360px', gap: theme.spacing(1), padding: theme.spacing(1), minHeight: 0, height: 'calc(100vh - 40px - 57px)' }),
-    left: css({ display: 'flex', flexDirection: 'column', minHeight: 0, background: theme.colors.background.primary, border: `1px solid ${theme.colors.border.weak}`, borderRadius: theme.shape.radius.default }),
-    steps: css({ flex: 1, overflow: 'auto', padding: theme.spacing(1), display: 'flex', flexDirection: 'column', gap: 2 }),
-    step: css({ all: 'unset', boxSizing: 'border-box', display: 'grid', gridTemplateColumns: '18px 24px 1fr', gap: theme.spacing(1), alignItems: 'start', padding: theme.spacing(1), borderRadius: theme.shape.radius.default, border: '1px solid transparent', cursor: 'pointer', fontSize: theme.typography.bodySmall.fontSize, lineHeight: 1.5, '&:hover': { background: theme.colors.action.hover } }),
-    stepActive: css({ background: theme.colors.action.selected, borderColor: theme.colors.primary.border }),
-    num: css({ color: theme.colors.text.secondary, textAlign: 'right', paddingTop: 2 }),
-    stepIcon: css({ width: 24, height: 24, borderRadius: '50%', display: 'grid', placeItems: 'center', background: theme.colors.primary.transparent, color: theme.colors.primary.text }),
-    stepIconAssert: css({ background: theme.colors.success.transparent, color: theme.colors.success.text }),
-    stepText: css({ paddingTop: 2, minWidth: 0, overflowWrap: 'anywhere' }),
-    chip: css({ background: theme.colors.background.secondary, border: `1px solid ${theme.colors.border.weak}`, borderRadius: 4, padding: '0 6px', fontFamily: 'inherit', fontSize: 'inherit', color: theme.colors.text.primary }),
-    muted: css({ color: theme.colors.text.secondary }),
-    healed: css({ display: 'inline-flex', alignItems: 'center', gap: 4, marginLeft: theme.spacing(1), padding: '0 6px', borderRadius: 10, fontSize: 11, color: theme.colors.warning.text, border: `1px solid ${theme.colors.warning.border}` }),
-    add: css({ all: 'unset', boxSizing: 'border-box', textAlign: 'center', marginTop: theme.spacing(0.5), padding: theme.spacing(1), border: `1px dashed ${theme.colors.border.medium}`, borderRadius: theme.shape.radius.default, color: theme.colors.text.secondary, cursor: 'pointer', '&:hover': { color: theme.colors.primary.text, borderColor: theme.colors.primary.border } }),
-    center: css({ display: 'flex', flexDirection: 'column', gap: theme.spacing(1), minWidth: 0, minHeight: 0 }),
-    noGrow: css({ flex: 'none' }),
-    alert: css({ margin: 0 }),
-    urlbar: css({ display: 'flex', alignItems: 'center', gap: theme.spacing(1), flex: 'none' }),
-    urlInput: css({ flex: 1 }),
-    browser: css({ flex: 1, minHeight: 0, borderRadius: theme.shape.radius.default, overflow: 'hidden', border: `1px solid ${theme.colors.border.weak}` }),
-    ring_record: ring(theme.colors.error.main),
-    ring_pick: ring(theme.colors.warning.main),
-    ring_assert: ring(theme.colors.success.main),
-    right: css({ minHeight: 0, overflow: 'auto' }),
-    options: css({ padding: theme.spacing(0, 1.5, 1.5) }),
-    target: css({ display: 'flex', flexDirection: 'column', gap: theme.spacing(1), padding: theme.spacing(1), background: theme.colors.background.secondary, borderRadius: theme.shape.radius.default }),
-    ok: css({ display: 'inline-flex', alignItems: 'center', gap: 4, color: theme.colors.success.text, fontSize: theme.typography.bodySmall.fontSize }),
-    row: css({ display: 'flex', gap: theme.spacing(1) }),
-    history: css({ display: 'flex', gap: 2, height: 18, marginBottom: theme.spacing(0.5), i: { flex: 1, borderRadius: 2 } }),
-    hOk: css({ background: theme.visualization.getColorByName('green'), opacity: 0.85 }),
-    hWarn: css({ background: theme.visualization.getColorByName('orange') }),
-    footer: css({ display: 'flex', justifyContent: 'flex-end', gap: theme.spacing(1), paddingTop: theme.spacing(1) }),
+  useEffect(() => {
+    const id = Number(new URLSearchParams(location.search).get('test'));
+    if (Number.isInteger(id) && id > 0) setTestId(id);
+  }, []);
+  useEffect(() => {
+    if (!testId) return;
+    api.test(testId).then((t) => { setTestName(t.name); setNameDraft(t.name); return api.tests(t.projectId); }).then(setOtherTests).catch((e) => setMessage((e as Error).message));
+  }, [testId]);
+  const onMessage = useCallback((msg: ServerMessage) => {
+    if (msg.type === 'error' || msg.type === 'aiError') setMessage(msg.message);
+    if (msg.type === 'picked') { setPicked(msg.locator); setMessage(`เลือก ${msg.text || locatorLabel(msg.locator)} แล้ว`); }
+    if (msg.type === 'selectOpen') setSelectMenu({ x: msg.x, y: msg.y, options: msg.options });
+    if (msg.type === 'selectOptions') { setOptions(msg.options ?? []); if (msg.error) setMessage(msg.error); }
+    if (msg.type === 'locatorTest') setLocatorResult(msg.error ?? `พบ ${msg.count ?? 0} รายการ`);
+    if (msg.type === 'aiResult') setAiResult(msg);
+    if (msg.type === 'export') setExportResult(msg);
+    if (msg.type === 'ready') setViewport(msg.viewport);
+    if (msg.type === 'state') setMode(msg.mode);
+  }, []);
+  const runner = useRunner({ testId, onMessage, onFrame: frameDraw, onReconnected: () => setMessage('เชื่อมต่อ runner ใหม่แล้ว') });
+  const editor = runner.editor;
+  const selected = editor?.steps.find((x) => x.id === selectedId) ?? editor?.steps[0];
+  useEffect(() => { if (editor?.steps.length && selectedId == null && editor.steps[0]!.id != null) setSelectedId(editor.steps[0]!.id!); }, [editor, selectedId]);
+  useEffect(() => { if (runner.url) setAddress(runner.url); }, [runner.url]);
+  const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const dragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !editor) return;
+    const from = editor.steps.findIndex((x) => x.id === Number(active.id));
+    const to = editor.steps.findIndex((x) => x.id === Number(over.id));
+    if (from < 0 || to < 0) return;
+    arrayMove(editor.steps, from, to);
+    setSelectedId(Number(active.id));
+    runner.send({ type: 'moveStep', id: Number(active.id), to });
   };
-};
+  const saveName = async () => { if (!testId || !nameDraft.trim()) return; try { await api.renameTest(testId, nameDraft.trim()); setTestName(nameDraft.trim()); setMessage('บันทึกชื่อเทสแล้ว'); } catch (e) { setMessage((e as Error).message); } };
+  const update = (patch: Record<string, unknown>) => {
+    if (!selected) return;
+    const next = { ...selected, ...patch } as Step;
+    runner.send({ type: 'updateStep', id: selected.id!, step: next, ...(secretValue ? { secretValue } : {}) });
+    setSecretValue('');
+  };
+  const setModeAndSend = (next: Mode | undefined) => { const m = next ?? 'interact'; setMode(m); runner.send({ type: 'mode', mode: m }); };
+  const onAdd = (action: ActionName) => runner.send({ type: 'insertStep', action });
+  const doPick = () => { setPicked(null); setModeAndSend('pick'); };
+  const steps = editor?.steps ?? [];
+  const health = selected ? editor?.health[selected.id!] : undefined;
+  const runDone = runner.run.done;
+  const runStep = runDone ? runner.run.steps : null;
+  const connectLabel = runner.conn === 'connected' ? 'เชื่อมต่อแล้ว' : runner.conn === 'reconnecting' ? 'กำลังเชื่อมต่อใหม่' : 'กำลังเชื่อมต่อ';
+  const actions = runner.ready?.actions;
+  const fields = useMemo(() => selected ? Object.entries(actions?.[selected.action]?.fields ?? {}) : [], [selected, actions]);
+
+  return <div className={s.page}>
+    <header className={s.toolbar}>
+      <IconButton name="arrow-left" tooltip="กลับไปรายการเทส" aria-label="กลับไปรายการเทส" onClick={() => { location.href = '/tests'; }} />
+      <Input className={s.titleInput} value={nameDraft} aria-label="ชื่อเทส" onChange={(e) => setNameDraft(e.currentTarget.value)} onBlur={() => { if (nameDraft !== testName) void saveName(); }} onKeyDown={(e) => { if (e.key === 'Enter') void saveName(); }} />
+      <Badge color={runner.conn === 'connected' ? 'green' : 'orange'} icon={runner.conn === 'connected' ? 'check-circle' : 'sync'} text={connectLabel} />
+      <span className={s.spacer} />
+      <RadioButtonGroup<Mode> options={modes} value={mode} onChange={setModeAndSend} size="sm" />
+      <Button size="sm" variant={editor?.recording ? 'destructive' : 'secondary'} icon="circle" onClick={() => runner.send({ type: 'record', on: !editor?.recording })}>{editor?.recording ? 'หยุดบันทึก' : 'บันทึก'}</Button>
+      <Button size="sm" variant="secondary" icon="ai-sparkle" onClick={() => setDialog('ai')}>AI</Button>
+      <Button size="sm" variant="primary" icon="play" disabled={!editor || editor.running} onClick={() => runner.send({ type: 'run' })}>รัน</Button>
+      <Button size="sm" variant="secondary" icon="download-alt" onClick={() => { setExportResult(null); setDialog('export'); runner.send({ type: 'export' }); }}>Export</Button>
+    </header>
+    {message && <Alert severity="info" title={message} className={s.notice} onRemove={() => setMessage('')} />}
+    {runner.connectError && <Alert severity="error" title={`เชื่อมต่อ runner ไม่สำเร็จ: ${runner.connectError}`} className={s.notice} />}
+    {runDone && <div className={s.runBanner}><Alert severity={runDone.passed ? 'success' : 'error'} title={runDone.passed ? `รันผ่าน ใช้เวลา ${(runDone.ms / 1000).toFixed(1)} วินาที` : 'รันไม่ผ่าน — เปิดผลการรันเพื่อดูข้อผิดพลาดและภาพหน้าจอ'} className={s.notice} /><Button size="sm" onClick={() => { location.href = `/runs?run=${runDone.runId}`; }}>ดูผลการรัน</Button></div>}
+    <div className={s.body}>
+      <aside className={s.left}><div className={s.panelTitle}>ขั้นตอน <Badge color="blue" text={`${steps.length}`} /></div><div className={s.steps}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={dragEnd}><SortableContext items={steps.map((x) => x.id!)} strategy={verticalListSortingStrategy}>
+          {steps.map((step, i) => <SortableStep key={step.id} step={step} index={i} active={step.id === selected?.id} health={editor?.health[step.id!]} run={runner.run.steps[step.id!]} onClick={() => setSelectedId(step.id!)} onDelete={() => runner.send({ type: 'deleteStep', id: step.id! })} />)}
+        </SortableContext></DndContext>
+        <div className={s.addRow}><Select aria-label="เลือก action เพื่อเพิ่ม step" options={Object.entries(actions ?? {}).map(([value, spec]) => ({ value, label: spec.label }))} placeholder="เพิ่ม step…" onChange={(v) => v.value && onAdd(v.value as ActionName)} /></div>
+      </div></aside>
+      <main className={s.center}>
+        <div className={s.urlbar}><IconButton name="arrow-left" aria-label="ย้อนกลับ" tooltip="ย้อนกลับ" disabled={!runner.ready} onClick={() => runner.send({ type: 'back' })} /><IconButton name="arrow-right" aria-label="ไปข้างหน้า" tooltip="ไปข้างหน้า" disabled={!runner.ready} onClick={() => runner.send({ type: 'forward' })} /><IconButton name="sync" aria-label="โหลดใหม่" tooltip="โหลดใหม่" disabled={!runner.ready} onClick={() => runner.send({ type: 'reload' })} /><Input value={address} aria-label="URL" className={s.urlInput} onChange={(e) => setAddress(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === 'Enter') runner.send({ type: 'navigate', url: address }); }} /><Button variant="secondary" onClick={() => runner.send({ type: 'navigate', url: address })}>เปิด</Button></div>
+        <div className={s.browser}>{runner.ready ? <BrowserView width={viewport.width} height={viewport.height} send={runner.send} mode={mode} registerFrame={registerFrame} selectMenu={selectMenu} onCloseSelect={() => setSelectMenu(null)} disabled={editor?.running} /> : <div className={s.wait} role="status">{runner.conn === 'connecting' ? 'กำลังเปิดเบราว์เซอร์…' : 'กำลังเชื่อมต่อ runner…'}</div>}</div>
+      </main>
+      <aside className={s.right}><PanelChrome title={selected ? `แก้ไข: ${actions?.[selected.action]?.label ?? selected.action}` : 'เลือก step'} padding="none"><div className={s.editor}>
+        {selected ? <>
+          <Field label="การกระทำ"><Select options={Object.entries(actions ?? {}).map(([value, spec]) => ({ value, label: spec.label }))} value={selected.action} onChange={(v) => v.value && update({ action: v.value })} /></Field>
+          {('locator' in selected) && <Field label="ตัวระบุ element"><div className={s.locator}>{locatorLabel(selected.locator ?? null)}<Button size="sm" variant="secondary" icon="search-plus" onClick={doPick}>เลือกจากหน้าเว็บ</Button><Button size="sm" variant="secondary" onClick={() => selected.locator && runner.send({ type: 'testLocator', locator: selected.locator })}>ทดสอบ</Button>{locatorResult && <small>{locatorResult}</small>}{picked && <Button size="sm" variant="primary" onClick={() => update({ locator: picked })}>ใช้ locator ที่เลือก</Button>}</div></Field>}
+          {fields.map(([key, label]) => <Field key={key} label={label} description={actions?.[selected.action]?.hints?.[key]}><Input value={String((selected as unknown as Record<string, unknown>)[key] ?? '')} onChange={(e) => update({ [key]: e.currentTarget.value })} /></Field>)}
+          {selected.action === 'fill' && <><Field label="ชื่อตัวแปรลับ (ถ้าต้องการ)"><Input value={String(('secret' in selected && selected.secret) || '')} placeholder="เช่น TEST_EMAIL" onChange={(e) => update({ secret: e.currentTarget.value.toUpperCase() })} /></Field>{'secret' in selected && selected.secret && <Field label={`ค่าใหม่ของ ${selected.secret}`} description="ค่าจะถูกบันทึกเป็น secret และไม่แสดงซ้ำ"><Input type="password" value={secretValue} onChange={(e) => setSecretValue(e.currentTarget.value)} /></Field>}</>}
+          {selected.action === 'selectOption' && <><Button size="sm" variant="secondary" onClick={() => 'locator' in selected && selected.locator && runner.send({ type: 'selectOptions', locator: selected.locator })}>โหลดตัวเลือกจากหน้าเว็บ ({options.length})</Button>{options.length > 0 && <Field label="ตัวเลือก"><Select options={options.map((o) => ({ label: o.label || o.value, value: o.value }))} value={selected.value} onChange={(v) => update({ value: v.value, label: v.label })} /></Field>}</>}
+          {selected.action === 'useTest' && <Field label="เทสที่ใช้ซ้ำ"><Select options={otherTests.filter((t) => t.id !== testId).map((t) => ({ label: t.name, value: t.id }))} value={selected.testId ?? undefined} placeholder="เลือกเทส" onChange={(v) => update({ testId: v.value ?? null })} /></Field>}
+          {health && <div className={s.health}><b>สุขภาพ locator</b><div>ผ่าน {health.runs - health.failed} / {health.runs} · ซ่อม {health.healed} · ล้มเหลว {health.failed}</div></div>}
+          {'fallbacks' in selected && selected.fallbacks?.length ? <Alert severity="warning" title="พบ locator ที่ระบบซ่อมให้อัตโนมัติ"><div>ระบบใช้ {locatorLabel(selected.fallbacks[0]!)} แทน locator เดิม</div><Button size="sm" variant="primary" onClick={() => testId && runner.send({ type: 'acceptHeal', testId, stepId: selected.id!, locator: selected.fallbacks![0]! })}>ยอมรับ locator ใหม่</Button></Alert> : null}
+          <div className={s.footer}><Button variant="destructive" icon="trash-alt" onClick={() => runner.send({ type: 'deleteStep', id: selected.id! })}>ลบ step</Button><Button variant="primary" icon="save" onClick={() => setMessage('บันทึก step แล้ว')}>บันทึก step</Button></div>
+        </> : <p>เพิ่ม step เพื่อเริ่มแก้ไข</p>}
+      </div></PanelChrome></aside>
+    </div>
+    {dialog && <Modal title={dialog === 'ai' ? 'สร้าง step ด้วย AI' : 'ส่งออกเทส'} isOpen onDismiss={() => setDialog(null)}><div className={s.modal}>
+      {dialog === 'ai' ? <>{runner.ready?.ai?.enabled ? <><p>อธิบายสิ่งที่ต้องการให้เทสทำ</p><TextArea value={aiText} onChange={(e) => setAiText(e.currentTarget.value)} placeholder="เช่น กรอกอีเมลและรหัสผ่าน แล้วกดเข้าสู่ระบบ" /><Button variant="primary" onClick={() => { setAiResult(null); runner.send({ type: 'aiGenerate', instruction: aiText }); }}>สร้าง step</Button>{aiResult && <><p>{aiResult.explanation}</p>{aiResult.items.map((item, i) => <div key={i}>{item.label} — {item.check === 'verified' ? 'ตรวจสอบผ่าน' : item.error ?? item.check}</div>)}<Button variant="primary" onClick={() => runner.send({ type: 'aiAccept', indexes: aiResult.items.flatMap((x) => x.index == null ? [] : [x.index]) })}>เพิ่ม step ที่เลือก</Button></>}</> : <Alert severity="info" title="ยังไม่ได้ตั้งค่า AI บน runner" />}</> : <>{exportResult ? <><Field label="โค้ด Playwright"><TextArea rows={12} readOnly value={exportResult.code} /></Field><Field label="ข้อมูล JSON"><TextArea rows={8} readOnly value={exportResult.json} /></Field></> : <span role="status">กำลังเตรียมข้อมูลส่งออก…</span>}</>}
+    </div></Modal>}
+  </div>;
+}
+
+function SortableStep({ step, index, active, health, run, onClick, onDelete }: { step: { id?: number; action: string; label: string; parts: { target?: unknown; value?: unknown } }; index: number; active: boolean; health?: { runs: number; healed: number; failed: number }; run?: { status?: string; error?: string }; onClick: () => void; onDelete: () => void }) {
+  const s = useStyles2(styles);
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: step.id! });
+  return <div ref={setNodeRef} data-testid="step-item" style={{ transform: CSS.Transform.toString(transform), transition }} className={`${s.step} ${active ? s.active : ''}`}>
+    <button className={s.drag} aria-label="ลากเพื่อเรียง step" {...attributes} {...listeners}><Icon name="draggabledots" /></button><button data-testid="step-main" className={s.stepMain} onClick={onClick}><span className={s.num}>{index + 1}</span><b>{step.label}</b><small>{String(step.parts.target || step.parts.value || '')}</small>{health && <Badge color={health.failed > 0 ? 'orange' : 'green'} text={`${health.runs - health.failed}/${health.runs}`} />}{run?.status && <Badge color={run.status === 'passed' ? 'green' : run.status === 'failed' ? 'red' : 'blue'} text={run.status === 'passed' ? 'ผ่าน' : run.status === 'failed' ? 'ไม่ผ่าน' : 'กำลังรัน'} />}</button><button className={s.delete} aria-label={`ลบ step ${index + 1}`} onClick={onDelete}><Icon name="trash-alt" /></button>
+  </div>;
+}
+
+const styles = (t: GrafanaTheme2) => ({
+  page: css({ height: '100%', display: 'grid', gridTemplateRows: 'auto auto minmax(0,1fr)', minHeight: 0 }), runBanner: css({ display: 'flex', alignItems: 'center', gap: 8 }),
+  toolbar: css({ display: 'flex', alignItems: 'center', gap: t.spacing(1), padding: t.spacing(1, 1.5), borderBottom: `1px solid ${t.colors.border.weak}`, flexWrap: 'wrap' }), titleInput: css({ width: 230 }), spacer: css({ flex: 1 }), notice: css({ margin: t.spacing(0.75, 1) }),
+  body: css({ display: 'grid', gridTemplateColumns: 'minmax(210px, 260px) minmax(320px, 1fr) minmax(280px, 350px)', gap: t.spacing(1), padding: t.spacing(1), height: 'calc(100vh - 116px)', minHeight: 0 }),
+  left: css({ minHeight: 0, display: 'flex', flexDirection: 'column', border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default, background: t.colors.background.primary }), panelTitle: css({ display: 'flex', alignItems: 'center', gap: 8, padding: t.spacing(1.5), fontWeight: 600, borderBottom: `1px solid ${t.colors.border.weak}` }), steps: css({ overflow: 'auto', padding: t.spacing(1), display: 'flex', flexDirection: 'column', gap: 5 }),
+  step: css({ display: 'grid', gridTemplateColumns: '24px 1fr 24px', border: `1px solid ${t.colors.border.weak}`, borderRadius: 4, background: t.colors.background.primary, '&:hover': { borderColor: t.colors.primary.border } }), active: css({ borderColor: t.colors.primary.border, background: t.colors.action.selected }), drag: css({ border: 0, background: 'transparent', color: t.colors.text.secondary, cursor: 'grab' }), stepMain: css({ textAlign: 'left', border: 0, background: 'transparent', color: t.colors.text.primary, display: 'grid', gridTemplateColumns: '20px 1fr', gap: 4, padding: 7, cursor: 'pointer', small: { gridColumn: '2', color: t.colors.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis' } }), num: css({ color: t.colors.text.secondary }), delete: css({ border: 0, background: 'transparent', color: t.colors.text.secondary, cursor: 'pointer' }), addRow: css({ paddingTop: 6 }),
+  center: css({ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: t.spacing(1) }), urlbar: css({ display: 'flex', alignItems: 'center', gap: 5 }), urlInput: css({ flex: 1 }), browser: css({ flex: 1, minHeight: 0, overflow: 'auto', display: 'grid', alignContent: 'start', justifyContent: 'center', background: t.colors.background.secondary, border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default }), wait: css({ display: 'flex', gap: 10, alignItems: 'center', padding: 30, color: t.colors.text.secondary }), right: css({ minHeight: 0, overflow: 'auto' }), editor: css({ padding: t.spacing(1.5), display: 'flex', flexDirection: 'column', gap: t.spacing(1) }), locator: css({ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 4, background: t.colors.background.secondary, overflowWrap: 'anywhere' }), health: css({ padding: 10, background: t.colors.background.secondary, borderRadius: 4, fontSize: 12 }), footer: css({ display: 'flex', justifyContent: 'space-between', gap: 8, paddingTop: 12 }), modal: css({ display: 'grid', gap: 12, minWidth: 500, maxWidth: 760 }),
+});
