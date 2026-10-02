@@ -91,7 +91,7 @@ export default function TestsPage() {
         </EmptyState>
       )}
       {tests.data && tests.data.length > 0 && (
-        <table className={s.table}>
+        <div className={s.tableWrap}><table className={s.table}>
           <thead><tr><th>ชื่อ</th><th>Steps</th><th>รันล่าสุด</th><th>แก้ไขเมื่อ</th><th aria-label="จัดการ" /></tr></thead>
           <tbody>
             {tests.data.map((t) => (
@@ -107,7 +107,7 @@ export default function TestsPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </table></div>
       )}
 
       <Modal title={dialog ? titles[dialog.kind] : ''} isOpen={dialog != null} onDismiss={close}>
@@ -128,12 +128,13 @@ export default function TestsPage() {
 }
 
 const styles = (t: GrafanaTheme2) => ({
-  page: css({ padding: t.spacing(3), maxWidth: 1100 }),
-  head: css({ display: 'flex', alignItems: 'center', gap: t.spacing(1.5), marginBottom: t.spacing(2) }),
+  page: css({ boxSizing: 'border-box', width: '100%', padding: t.spacing(3), maxWidth: 1480, margin: '0 auto', '@media (max-width: 760px)': { padding: t.spacing(2) } }),
+  head: css({ display: 'flex', alignItems: 'center', gap: t.spacing(1.5), marginBottom: t.spacing(2), flexWrap: 'wrap' }),
   title: css({ margin: 0, marginRight: t.spacing(1) }),
   select: css({}),
   spacer: css({ flex: 1 }),
-  table: css({ width: '100%', borderCollapse: 'collapse', 'th, td': { textAlign: 'left', padding: t.spacing(1.25, 1.5), borderBottom: `1px solid ${t.colors.border.weak}` }, th: { color: t.colors.text.secondary, fontWeight: 500, fontSize: t.typography.bodySmall.fontSize } }),
+  table: css({ width: '100%', minWidth: 720, borderCollapse: 'collapse', 'th, td': { textAlign: 'left', padding: t.spacing(1.25, 1.5), borderBottom: `1px solid ${t.colors.border.weak}` }, th: { color: t.colors.text.secondary, fontWeight: 500, fontSize: t.typography.bodySmall.fontSize } }),
+  tableWrap: css({ overflowX: 'auto', border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default, 'table th:not(:last-child), table td:not(:last-child)': { borderRight: `1px solid ${t.colors.border.weak}` }, 'thead': { background: t.colors.background.secondary }, 'tbody tr:last-child td': { borderBottom: 0 }, 'tbody tr:hover': { background: t.colors.action.hover } }),
   link: css({ color: t.colors.text.link, fontWeight: 500 }),
   muted: css({ color: t.colors.text.secondary }),
   actions: css({ display: 'flex', gap: t.spacing(1), justifyContent: 'flex-end' }),

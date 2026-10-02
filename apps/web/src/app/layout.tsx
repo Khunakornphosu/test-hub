@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { IBM_Plex_Sans_Thai, Inter, JetBrains_Mono } from 'next/font/google';
+import './globals.css';
 
 const thai = IBM_Plex_Sans_Thai({ subsets: ['thai', 'latin'], weight: ['300', '400', '500', '600'], variable: '--font-sans' });
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' });

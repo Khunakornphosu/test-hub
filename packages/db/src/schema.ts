@@ -27,6 +27,34 @@ export const tests = pgTable(
   (t) => [index('tests_project_idx').on(t.projectId)]
 );
 
+export interface FlowNodeRecord {
+  id: string;
+  type: 'testCase';
+  testId: number;
+  position: { x: number; y: number };
+}
+
+export interface FlowEdgeRecord {
+  id: string;
+  source: string;
+  target: string;
+  label?: string;
+}
+
+export const flows = pgTable(
+  'flows',
+  {
+    id: serial('id').primaryKey(),
+    projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    nodes: jsonb('nodes').$type<FlowNodeRecord[]>().notNull().default(sql`'[]'::jsonb`),
+    edges: jsonb('edges').$type<FlowEdgeRecord[]>().notNull().default(sql`'[]'::jsonb`),
+    createdAt: createdAt(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('flows_project_idx').on(t.projectId)]
+);
+
 /** ค่าที่เก็บเป็นข้อความที่เข้ารหัสแล้ว (enc:v1:…) ไม่เคยเก็บค่าจริง */
 export const secrets = pgTable(
   'secrets',

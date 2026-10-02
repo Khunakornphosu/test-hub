@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import type { GrafanaTheme2 } from '@grafana/data';
 import { Alert, Badge, Button, Field, Icon, IconButton, Input, Modal, PanelChrome, RadioButtonGroup, Select, TextArea, useStyles2 } from '@grafana/ui';
@@ -14,6 +14,10 @@ import { useRunner } from '@/lib/runner';
 const labels: Record<Mode, string> = { interact: 'โต้ตอบ', pick: 'เลือก element', assertVisible: 'ตรวจการแสดงผล', assertText: 'ตรวจข้อความ', assertURL: 'ตรวจ URL' };
 const modes = (Object.keys(labels) as Mode[]).map((value) => ({ value, label: labels[value] }));
 const locatorLabel = (l: Locator | null) => !l ? 'ยังไม่ได้เลือก element' : l.type === 'role' ? `${l.role}${l.name ? `: ${l.name}` : ''}` : `${l.type}: ${l.value}`;
+const stepDetail = (target: unknown, value: unknown) => {
+  if (target && typeof target === 'object' && 'text' in target && typeof target.text === 'string') return target.text;
+  return typeof value === 'string' || typeof value === 'number' ? String(value) : '';
+};
 
 export default function Workspace() {
   const s = useStyles2(styles);
@@ -27,6 +31,7 @@ export default function Workspace() {
   const [message, setMessage] = useState('');
   const [selectMenu, setSelectMenu] = useState<SelectMenu | null>(null);
   const [picked, setPicked] = useState<Locator | null>(null);
+  const pickStepId = useRef<number | null>(null);
   const [locatorResult, setLocatorResult] = useState('');
   const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
   const [secretValue, setSecretValue] = useState('');
@@ -47,6 +52,7 @@ export default function Workspace() {
     api.test(testId).then((t) => { setTestName(t.name); setNameDraft(t.name); return api.tests(t.projectId); }).then(setOtherTests).catch((e) => setMessage((e as Error).message));
   }, [testId]);
   const onMessage = useCallback((msg: ServerMessage) => {
+    if (msg.type === 'stepAdded') setSelectedId(msg.id);
     if (msg.type === 'error' || msg.type === 'aiError') setMessage(msg.message);
     if (msg.type === 'picked') { setPicked(msg.locator); setMessage(`เลือก ${msg.text || locatorLabel(msg.locator)} แล้ว`); }
     if (msg.type === 'selectOpen') setSelectMenu({ x: msg.x, y: msg.y, options: msg.options });
@@ -80,9 +86,23 @@ export default function Workspace() {
     runner.send({ type: 'updateStep', id: selected.id!, step: next, ...(secretValue ? { secretValue } : {}) });
     setSecretValue('');
   };
+  useEffect(() => {
+    if (!picked) return;
+    const id = pickStepId.current;
+    pickStepId.current = null;
+    const step = id == null ? undefined : editor?.steps.find((item) => item.id === id);
+    if (!step) {
+      setMessage('เลือก element แล้ว แต่ไม่พบ step ที่กำลังแก้');
+      setPicked(null);
+      return;
+    }
+    runner.send({ type: 'updateStep', id: step.id!, step: { ...step, locator: picked } });
+    setMessage(`เลือก ${locatorLabel(picked)} แล้ว และใส่ locator ให้ step แล้ว`);
+    setPicked(null);
+  }, [picked, editor, runner.send]);
   const setModeAndSend = (next: Mode | undefined) => { const m = next ?? 'interact'; setMode(m); runner.send({ type: 'mode', mode: m }); };
   const onAdd = (action: ActionName) => runner.send({ type: 'insertStep', action });
-  const doPick = () => { setPicked(null); setModeAndSend('pick'); };
+  const doPick = () => { pickStepId.current = selected?.id ?? null; setPicked(null); setModeAndSend('pick'); };
   const steps = editor?.steps ?? [];
   const health = selected ? editor?.health[selected.id!] : undefined;
   const runDone = runner.run.done;
@@ -97,7 +117,8 @@ export default function Workspace() {
       <Input className={s.titleInput} value={nameDraft} aria-label="ชื่อเทส" onChange={(e) => setNameDraft(e.currentTarget.value)} onBlur={() => { if (nameDraft !== testName) void saveName(); }} onKeyDown={(e) => { if (e.key === 'Enter') void saveName(); }} />
       <Badge color={runner.conn === 'connected' ? 'green' : 'orange'} icon={runner.conn === 'connected' ? 'check-circle' : 'sync'} text={connectLabel} />
       <span className={s.spacer} />
-      <RadioButtonGroup<Mode> options={modes} value={mode} onChange={setModeAndSend} size="sm" />
+      <div className={s.modePicker}><RadioButtonGroup<Mode> options={modes} value={mode} onChange={setModeAndSend} size="sm" /></div>
+      <div className={s.mobileModePicker}><Select aria-label="โหมดการทำงาน" width={32} options={modes} value={mode} onChange={(v) => v.value && setModeAndSend(v.value as Mode)} /></div>
       <Button size="sm" variant={editor?.recording ? 'destructive' : 'secondary'} icon="circle" onClick={() => runner.send({ type: 'record', on: !editor?.recording })}>{editor?.recording ? 'หยุดบันทึก' : 'บันทึก'}</Button>
       <Button size="sm" variant="secondary" icon="ai-sparkle" onClick={() => setDialog('ai')}>AI</Button>
       <Button size="sm" variant="primary" icon="play" disabled={!editor || editor.running} onClick={() => runner.send({ type: 'run' })}>รัน</Button>
@@ -114,13 +135,13 @@ export default function Workspace() {
         <div className={s.addRow}><Select aria-label="เลือก action เพื่อเพิ่ม step" options={Object.entries(actions ?? {}).map(([value, spec]) => ({ value, label: spec.label }))} placeholder="เพิ่ม step…" onChange={(v) => v.value && onAdd(v.value as ActionName)} /></div>
       </div></aside>
       <main className={s.center}>
-        <div className={s.urlbar}><IconButton name="arrow-left" aria-label="ย้อนกลับ" tooltip="ย้อนกลับ" disabled={!runner.ready} onClick={() => runner.send({ type: 'back' })} /><IconButton name="arrow-right" aria-label="ไปข้างหน้า" tooltip="ไปข้างหน้า" disabled={!runner.ready} onClick={() => runner.send({ type: 'forward' })} /><IconButton name="sync" aria-label="โหลดใหม่" tooltip="โหลดใหม่" disabled={!runner.ready} onClick={() => runner.send({ type: 'reload' })} /><Input value={address} aria-label="URL" className={s.urlInput} onChange={(e) => setAddress(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === 'Enter') runner.send({ type: 'navigate', url: address }); }} /><Button variant="secondary" onClick={() => runner.send({ type: 'navigate', url: address })}>เปิด</Button></div>
+        <div className={s.urlbar}><IconButton name="arrow-left" aria-label="ย้อนกลับ" tooltip="ย้อนกลับ" disabled={!runner.ready} onClick={() => runner.send({ type: 'back' })} /><IconButton name="arrow-right" aria-label="ไปข้างหน้า" tooltip="ไปข้างหน้า" disabled={!runner.ready} onClick={() => runner.send({ type: 'forward' })} /><IconButton name="sync" aria-label="โหลดใหม่" tooltip="โหลดใหม่" disabled={!runner.ready} onClick={() => runner.send({ type: 'reload' })} /><Input value={address} aria-label="URL" placeholder="https://example.com" className={s.urlInput} onChange={(e) => setAddress(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === 'Enter') runner.send({ type: 'navigate', url: address }); }} /><Button variant="secondary" disabled={!runner.ready || !address.trim()} onClick={() => runner.send({ type: 'navigate', url: address })}>เปิด</Button></div>
         <div className={s.browser}>{runner.ready ? <BrowserView width={viewport.width} height={viewport.height} send={runner.send} mode={mode} registerFrame={registerFrame} selectMenu={selectMenu} onCloseSelect={() => setSelectMenu(null)} disabled={editor?.running} /> : <div className={s.wait} role="status">{runner.conn === 'connecting' ? 'กำลังเปิดเบราว์เซอร์…' : 'กำลังเชื่อมต่อ runner…'}</div>}</div>
       </main>
       <aside className={s.right}><PanelChrome title={selected ? `แก้ไข: ${actions?.[selected.action]?.label ?? selected.action}` : 'เลือก step'} padding="none"><div className={s.editor}>
         {selected ? <>
           <Field label="การกระทำ"><Select options={Object.entries(actions ?? {}).map(([value, spec]) => ({ value, label: spec.label }))} value={selected.action} onChange={(v) => v.value && update({ action: v.value })} /></Field>
-          {('locator' in selected) && <Field label="ตัวระบุ element"><div className={s.locator}>{locatorLabel(selected.locator ?? null)}<Button size="sm" variant="secondary" icon="search-plus" onClick={doPick}>เลือกจากหน้าเว็บ</Button><Button size="sm" variant="secondary" onClick={() => selected.locator && runner.send({ type: 'testLocator', locator: selected.locator })}>ทดสอบ</Button>{locatorResult && <small>{locatorResult}</small>}{picked && <Button size="sm" variant="primary" onClick={() => update({ locator: picked })}>ใช้ locator ที่เลือก</Button>}</div></Field>}
+          {('locator' in selected) && <Field label="ตัวระบุ element"><div data-testid="step-locator" className={s.locator}>{locatorLabel(selected.locator ?? null)}<Button size="sm" variant="secondary" icon="search-plus" onClick={doPick}>เลือกจากหน้าเว็บ</Button><Button size="sm" variant="secondary" onClick={() => selected.locator && runner.send({ type: 'testLocator', locator: selected.locator })}>ทดสอบ</Button>{locatorResult && <small>{locatorResult}</small>}</div></Field>}
           {fields.map(([key, label]) => <Field key={key} label={label} description={actions?.[selected.action]?.hints?.[key]}><Input value={String((selected as unknown as Record<string, unknown>)[key] ?? '')} onChange={(e) => update({ [key]: e.currentTarget.value })} /></Field>)}
           {selected.action === 'fill' && <><Field label="ชื่อตัวแปรลับ (ถ้าต้องการ)"><Input value={String(('secret' in selected && selected.secret) || '')} placeholder="เช่น TEST_EMAIL" onChange={(e) => update({ secret: e.currentTarget.value.toUpperCase() })} /></Field>{'secret' in selected && selected.secret && <Field label={`ค่าใหม่ของ ${selected.secret}`} description="ค่าจะถูกบันทึกเป็น secret และไม่แสดงซ้ำ"><Input type="password" value={secretValue} onChange={(e) => setSecretValue(e.currentTarget.value)} /></Field>}</>}
           {selected.action === 'selectOption' && <><Button size="sm" variant="secondary" onClick={() => 'locator' in selected && selected.locator && runner.send({ type: 'selectOptions', locator: selected.locator })}>โหลดตัวเลือกจากหน้าเว็บ ({options.length})</Button>{options.length > 0 && <Field label="ตัวเลือก"><Select options={options.map((o) => ({ label: o.label || o.value, value: o.value }))} value={selected.value} onChange={(v) => update({ value: v.value, label: v.label })} /></Field>}</>}
@@ -141,15 +162,15 @@ function SortableStep({ step, index, active, health, run, onClick, onDelete }: {
   const s = useStyles2(styles);
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: step.id! });
   return <div ref={setNodeRef} data-testid="step-item" style={{ transform: CSS.Transform.toString(transform), transition }} className={`${s.step} ${active ? s.active : ''}`}>
-    <button className={s.drag} aria-label="ลากเพื่อเรียง step" {...attributes} {...listeners}><Icon name="draggabledots" /></button><button data-testid="step-main" className={s.stepMain} onClick={onClick}><span className={s.num}>{index + 1}</span><b>{step.label}</b><small>{String(step.parts.target || step.parts.value || '')}</small>{health && <Badge color={health.failed > 0 ? 'orange' : 'green'} text={`${health.runs - health.failed}/${health.runs}`} />}{run?.status && <Badge color={run.status === 'passed' ? 'green' : run.status === 'failed' ? 'red' : 'blue'} text={run.status === 'passed' ? 'ผ่าน' : run.status === 'failed' ? 'ไม่ผ่าน' : 'กำลังรัน'} />}</button><button className={s.delete} aria-label={`ลบ step ${index + 1}`} onClick={onDelete}><Icon name="trash-alt" /></button>
+    <button className={s.drag} aria-label="ลากเพื่อเรียง step" {...attributes} {...listeners}><Icon name="draggabledots" /></button><button data-testid="step-main" aria-current={active ? 'step' : undefined} className={s.stepMain} onClick={onClick}><span className={s.num}>{index + 1}</span><b>{step.label}</b><small>{stepDetail(step.parts.target, step.parts.value)}</small>{health && <Badge color={health.failed > 0 ? 'orange' : 'green'} text={`${health.runs - health.failed}/${health.runs}`} />}{run?.status && <Badge color={run.status === 'passed' ? 'green' : run.status === 'failed' ? 'red' : 'blue'} text={run.status === 'passed' ? 'ผ่าน' : run.status === 'failed' ? 'ไม่ผ่าน' : 'กำลังรัน'} />}</button><button className={s.delete} aria-label={`ลบ step ${index + 1}`} onClick={onDelete}><Icon name="trash-alt" /></button>
   </div>;
 }
 
 const styles = (t: GrafanaTheme2) => ({
-  page: css({ height: '100%', display: 'grid', gridTemplateRows: 'auto auto minmax(0,1fr)', minHeight: 0 }), runBanner: css({ display: 'flex', alignItems: 'center', gap: 8 }),
-  toolbar: css({ display: 'flex', alignItems: 'center', gap: t.spacing(1), padding: t.spacing(1, 1.5), borderBottom: `1px solid ${t.colors.border.weak}`, flexWrap: 'wrap' }), titleInput: css({ width: 230 }), spacer: css({ flex: 1 }), notice: css({ margin: t.spacing(0.75, 1) }),
-  body: css({ display: 'grid', gridTemplateColumns: 'minmax(210px, 260px) minmax(320px, 1fr) minmax(280px, 350px)', gap: t.spacing(1), padding: t.spacing(1), height: 'calc(100vh - 116px)', minHeight: 0 }),
-  left: css({ minHeight: 0, display: 'flex', flexDirection: 'column', border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default, background: t.colors.background.primary }), panelTitle: css({ display: 'flex', alignItems: 'center', gap: 8, padding: t.spacing(1.5), fontWeight: 600, borderBottom: `1px solid ${t.colors.border.weak}` }), steps: css({ overflow: 'auto', padding: t.spacing(1), display: 'flex', flexDirection: 'column', gap: 5 }),
+  page: css({ height: '100%', display: 'grid', gridTemplateRows: 'auto auto auto auto minmax(0,1fr)', minHeight: 0 }), runBanner: css({ display: 'flex', alignItems: 'center', gap: 8 }),
+  toolbar: css({ display: 'flex', alignItems: 'center', gap: t.spacing(1), padding: t.spacing(1, 1.5), borderBottom: `1px solid ${t.colors.border.weak}`, flexWrap: 'wrap' }), titleInput: css({ width: 230 }), spacer: css({ flex: 1 }), modePicker: css({ minWidth: 0, '@media (max-width: 760px)': { display: 'none' } }), mobileModePicker: css({ display: 'none', '@media (max-width: 760px)': { display: 'block', flex: '1 0 100%', width: '100%' } }), notice: css({ margin: t.spacing(0.75, 1) }),
+  body: css({ gridRow: 5, display: 'grid', gridTemplateColumns: 'minmax(190px, 240px) minmax(0, 1fr) minmax(260px, 320px)', gap: t.spacing(1), padding: t.spacing(1), height: '100%', minHeight: 0, '@media (max-width: 1100px)': { gridTemplateColumns: 'minmax(180px, 230px) minmax(0, 1fr)', gridTemplateRows: 'minmax(420px, 1fr) auto', height: 'auto', overflowY: 'auto' }, '@media (max-width: 760px)': { gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateRows: 'minmax(360px, 55vh) auto auto', minHeight: 'calc(100vh - 116px)' } }),
+  left: css({ minHeight: 0, display: 'flex', flexDirection: 'column', border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default, background: t.colors.background.primary, '@media (max-width: 760px)': { gridRow: 2, maxHeight: 300 } }), panelTitle: css({ display: 'flex', alignItems: 'center', gap: 8, padding: t.spacing(1.5), fontWeight: 600, borderBottom: `1px solid ${t.colors.border.weak}` }), steps: css({ overflow: 'auto', padding: t.spacing(1), display: 'flex', flexDirection: 'column', gap: 5 }),
   step: css({ display: 'grid', gridTemplateColumns: '24px 1fr 24px', border: `1px solid ${t.colors.border.weak}`, borderRadius: 4, background: t.colors.background.primary, '&:hover': { borderColor: t.colors.primary.border } }), active: css({ borderColor: t.colors.primary.border, background: t.colors.action.selected }), drag: css({ border: 0, background: 'transparent', color: t.colors.text.secondary, cursor: 'grab' }), stepMain: css({ textAlign: 'left', border: 0, background: 'transparent', color: t.colors.text.primary, display: 'grid', gridTemplateColumns: '20px 1fr', gap: 4, padding: 7, cursor: 'pointer', small: { gridColumn: '2', color: t.colors.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis' } }), num: css({ color: t.colors.text.secondary }), delete: css({ border: 0, background: 'transparent', color: t.colors.text.secondary, cursor: 'pointer' }), addRow: css({ paddingTop: 6 }),
-  center: css({ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: t.spacing(1) }), urlbar: css({ display: 'flex', alignItems: 'center', gap: 5 }), urlInput: css({ flex: 1 }), browser: css({ flex: 1, minHeight: 0, overflow: 'auto', display: 'grid', alignContent: 'start', justifyContent: 'center', background: t.colors.background.secondary, border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default }), wait: css({ display: 'flex', gap: 10, alignItems: 'center', padding: 30, color: t.colors.text.secondary }), right: css({ minHeight: 0, overflow: 'auto' }), editor: css({ padding: t.spacing(1.5), display: 'flex', flexDirection: 'column', gap: t.spacing(1) }), locator: css({ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 4, background: t.colors.background.secondary, overflowWrap: 'anywhere' }), health: css({ padding: 10, background: t.colors.background.secondary, borderRadius: 4, fontSize: 12 }), footer: css({ display: 'flex', justifyContent: 'space-between', gap: 8, paddingTop: 12 }), modal: css({ display: 'grid', gap: 12, minWidth: 500, maxWidth: 760 }),
+  center: css({ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: t.spacing(1), '@media (max-width: 760px)': { gridRow: 1 } }), urlbar: css({ display: 'flex', alignItems: 'center', gap: 5 }), urlInput: css({ flex: 1, minWidth: 0 }), browser: css({ flex: 1, minHeight: 0, overflow: 'auto', display: 'grid', alignContent: 'start', justifyContent: 'center', background: t.colors.background.secondary, border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default }), wait: css({ display: 'flex', gap: 10, alignItems: 'center', padding: 30, color: t.colors.text.secondary }), right: css({ minHeight: 0, overflow: 'auto', '@media (max-width: 1100px)': { gridColumn: '1 / -1', maxHeight: 420 }, '@media (max-width: 760px)': { gridColumn: 'auto', gridRow: 3, maxHeight: 'none' } }), editor: css({ padding: t.spacing(1.5), display: 'flex', flexDirection: 'column', gap: t.spacing(1) }), locator: css({ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 4, background: t.colors.background.secondary, overflowWrap: 'anywhere' }), health: css({ padding: 10, background: t.colors.background.secondary, borderRadius: 4, fontSize: 12 }), footer: css({ display: 'flex', justifyContent: 'space-between', gap: 8, paddingTop: 12 }), modal: css({ display: 'grid', gap: 12, minWidth: 500, maxWidth: 760 }),
 });

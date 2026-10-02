@@ -23,6 +23,13 @@ test('สร้างและบันทึก login, รันผ่านแ
   await page.goto(`/workspace?test=${testId}`);
   await expect(page.getByTestId('browser-canvas')).toBeVisible();
   await expect(page.getByText('เชื่อมต่อแล้ว')).toBeVisible({ timeout: 30_000 });
+  // A newly inserted step should become active without requiring a second click.
+  await page.getByLabel('เลือก action เพื่อเพิ่ม step').click();
+  await page.getByRole('option', { name: 'คลิก', exact: true }).click();
+  await expect(page.getByTestId('step-item')).toHaveCount(1);
+  await expect(page.getByTestId('step-main')).toHaveAttribute('aria-current', 'step');
+  await page.getByRole('button', { name: 'ลบ step 1' }).click();
+  await expect(page.getByTestId('step-item')).toHaveCount(0);
   const url = page.getByRole('textbox', { name: 'URL' });
   await url.fill(`${baseURL}/demo-login.html`);
   await url.press('Enter');
@@ -39,6 +46,12 @@ test('สร้างและบันทึก login, รันผ่านแ
   await page.keyboard.type('secret-password');
   await clickRemote(640, 430);
   await expect(page.getByTestId('step-item')).toHaveCount(6, { timeout: 10_000 });
+  const clickStep = page.getByTestId('step-item').filter({ hasText: 'คลิก' }).first();
+  await clickStep.getByTestId('step-main').click();
+  await page.getByRole('button', { name: 'เลือกจากหน้าเว็บ' }).click();
+  await clickRemote(640, 290);
+  await expect(page.getByTestId('step-locator')).toContainText('text: อีเมล', { timeout: 10_000 });
+  await expect(page.getByRole('button', { name: 'ใช้ locator ที่เลือก' })).toHaveCount(0);
   // เก็บข้อมูลทดสอบผ่านหน้าจัดการ secrets โดย API จะคืนเฉพาะชื่อ
   await request.put(`/api/projects/${projectId}/secrets/E2E_PASSWORD`, { data: { value: 'secret-password' } });
   const secretNames = await request.get(`/api/projects/${projectId}/secrets`).then((r) => r.json());

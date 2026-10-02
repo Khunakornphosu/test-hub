@@ -13,6 +13,9 @@
     "prebuild": "node scripts/sync-assets.mjs"
   },
   "dependencies": {
+    "@dnd-kit/core": "^6.3.0",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
     "@emotion/cache": "^11.14.0",
     "@emotion/css": "^11.13.5",
     "@emotion/react": "^11.14.0",
@@ -24,16 +27,14 @@
     "@mui/material": "^9.4.0",
     "@mui/material-nextjs": "^9.4.0",
     "@mui/x-charts": "^9.14.0",
+    "@tanstack/react-query": "^5.60.0",
+    "@test-studio/core": "*",
+    "@test-studio/db": "*",
+    "@xyflow/react": "^12.12.0",
     "next": "^16.3.8",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "react-grid-layout": "^2.2.4",
-    "@test-studio/core": "*",
-    "@test-studio/db": "*",
-    "@tanstack/react-query": "^5.60.0",
-    "@dnd-kit/core": "^6.3.0",
-    "@dnd-kit/sortable": "^10.0.0",
-    "@dnd-kit/utilities": "^3.2.2"
+    "react-grid-layout": "^2.2.4"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",
