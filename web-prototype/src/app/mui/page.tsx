@@ -68,7 +68,7 @@ export default function Dashboard() {
       </Box>
 
       <Box sx={{ gridColumn: 'span 12' }}>
-        <Panel title="ความล้มเหลวล่าสุด" actions={<MuiLink href="/runs" underline="hover" variant="caption">ดูทั้งหมด</MuiLink>}>
+        <Panel title="ความล้มเหลวล่าสุด" actions={<MuiLink href="/mui/runs" underline="hover" variant="caption">ดูทั้งหมด</MuiLink>}>
           <Box sx={{ fontFamily: 'var(--font-mono, ui-monospace, monospace)', fontSize: 12 }}>
             {failures.map((f, i) => (
               <Box key={i} sx={{ display: 'grid', gridTemplateColumns: '78px 12px 180px 80px 1fr', gap: 1.5, px: 1.5, py: 0.9, alignItems: 'center', borderBottom: i < failures.length - 1 ? 1 : 0, borderColor: 'divider', '&:hover': { bgcolor: 'action.hover' }, cursor: 'pointer' }}>

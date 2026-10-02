@@ -17,11 +17,11 @@ import RefreshOutlined from '@mui/icons-material/RefreshOutlined';
 import { useState } from 'react';
 
 const NAV = [
-  { href: '/', label: 'Dashboard', icon: <DashboardOutlined fontSize="small" /> },
-  { href: '/tests', label: 'เทสเคส', icon: <ListAltOutlined fontSize="small" /> },
-  { href: '/workspace', label: 'Workspace', icon: <EditNoteOutlined fontSize="small" /> },
-  { href: '/runs', label: 'ผลการรัน', icon: <HistoryOutlined fontSize="small" /> },
-  { href: '/settings', label: 'ตั้งค่า', icon: <SettingsOutlined fontSize="small" /> },
+  { href: '/mui', label: 'Dashboard', icon: <DashboardOutlined fontSize="small" /> },
+  { href: '/mui/tests', label: 'เทสเคส', icon: <ListAltOutlined fontSize="small" /> },
+  { href: '/mui/workspace', label: 'Workspace', icon: <EditNoteOutlined fontSize="small" /> },
+  { href: '/mui/runs', label: 'ผลการรัน', icon: <HistoryOutlined fontSize="small" /> },
+  { href: '/mui/settings', label: 'ตั้งค่า', icon: <SettingsOutlined fontSize="small" /> },
 ];
 
 const RAIL = 56;
@@ -47,7 +47,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { mode, setMode } = useColorScheme();
   const [range, setRange] = useState('7 วันล่าสุด');
   const [refresh, setRefresh] = useState('30 วินาที');
-  const active = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
+  const active = (href: string) => (href === '/mui' ? path === '/mui' : path.startsWith(href));
 
   return (
     <Box sx={{ display: 'grid', gridTemplateColumns: `${RAIL}px 1fr`, gridTemplateRows: '48px 1fr', height: '100vh' }}>
