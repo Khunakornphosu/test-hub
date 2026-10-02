@@ -22,21 +22,27 @@ Step 4 (ภายหลัง): Google login (Auth.js), Neon Postgres, Vercel �
 - [x] หน้า "เทสเคส" `components/g/TestsPage.tsx` (สร้าง/เปลี่ยนชื่อ/ลบเทสและโปรเจกต์) — typecheck ผ่าน แต่ **ยังไม่ได้ดูในเบราว์เซอร์/ยังไม่มี E2E**
 - [x] `src/lib/runner.ts` — hook `useRunner` (ขอ token, ต่อ WS, reconnect แบบ backoff, ส่ง `openTest` ซ้ำหลัง `ready`, เก็บ state/run) — typecheck ผ่าน ยังไม่ได้ทดสอบจริง
 - [x] `components/g/BrowserView.tsx` — canvas + เมาส์/wheel/IME/คีย์บอร์ด/เมนู dropdown (พอร์ตจาก `poc-screencast/public/index.html` บรรทัด ~1378–1475)
+- [x] Workspace จริง — runner, step editor, ลากเรียง, locator picker, secrets, AI/export, run status และ reconnect
+- [x] ผลการรัน — รายการจาก `/api/runs`, step detail และ screenshot
+- [x] Dashboard — สถิติจาก `/api/stats` พร้อมช่วงเวลา/โปรเจกต์
+- [x] ตั้งค่า secrets โดยไม่แสดงค่าที่บันทึกไว้
+- [x] `apps/web/public/demo-login.html` และ Playwright E2E ครบ flow หลัก; ลบข้อมูลโปรเจกต์ E2E อัตโนมัติ
+- [x] README root และ `apps/web/README.md`
 
 ## ยังต้องทำ (ตามลำดับ)
-1. **Workspace จริง** แทน `components/g/Workspace.tsx` (ตอนนี้ mock) และอ่าน `?test=<id>` จาก URL (ลิงก์จากหน้ารายการใช้รูปนี้แล้ว)
+1. ~~**Workspace จริง** แทน `components/g/Workspace.tsx` และอ่าน `?test=<id>` จาก URL~~
    - แถบ toolbar: ชื่อเทส (เปลี่ยนชื่อผ่าน `api.renameTest`), โหมด (`mode` message: interact/assertVisible/assertText/assertURL/pick), บันทึก (`record`), AI, รัน (`run`), Export
    - แถบ URL (`navigate/back/forward/reload`, แสดง `url` จาก runner)
    - รายการ step ลากสลับด้วย dnd-kit (`moveStep`), badge สุขภาพ (`editor.health`), กล่อง self-heal (ปุ่มยอมรับ → `acceptHeal`), ลบ (`deleteStep`), เพิ่ม (`insertStep`)
    - Step editor สร้างฟอร์มจาก `ready.actions` (`ACTIONS`): locator picker (`pick` → `picked`), `testLocator`→`locatorTest`, dropdown options (`selectOptions`), fill+secret (`updateStep` พร้อม `secretValue`), `useTest` เลือกเทสอื่น
    - แบนเนอร์สถานะรัน (`runStart/runStep/runDone`), dialog AI (`aiGenerate`→`aiResult`→`aiAccept`; ถ้า `ready.ai.enabled` เป็น false ให้บอกว่ายังไม่ได้ตั้งค่า), dialog Export (`export`→โค้ด+JSON)
    - toast เมื่อ reconnect (`onReconnected`), แสดงสถานะ `conn`
-2. **หน้า ผลการรัน**: ต้องเพิ่ม API ที่ยังไม่มี/ใช้ของที่มี `GET /api/runs`, `GET /api/runs/[id]` (+ `/screenshot`) แสดงรายการ, รายละเอียดทีละ step, screenshot
-3. **Dashboard** ใน `components/g/Dashboard.tsx` ต่อ `GET /api/stats?from&to&projectId` (ช่วงเวลา, series, slowest, timeline, failures)
-4. **หน้า ตั้งค่า**: จัดการ secrets (`api.secrets/setSecret/deleteSecret`; ห้ามแสดงค่าเดิม)
-5. หน้า demo `apps/web/public/demo-login.html` (ใช้เป็นเป้าหมายเทสใน E2E; runner ต้องตั้ง `APP_PORT` = พอร์ตของ web เพื่อยกเว้น URL guard)
-6. **E2E ของ web** (Playwright; web + runner + Postgres test DB) ครอบ: สร้างเทส → บันทึก flow login → รัน ผ่าน → ลบ step ให้พัง → เห็น error + screenshot → export → reconnect → dashboard มีตัวเลข
-7. อัปเดต `README.md` รากและ `apps/web/README`; commit ทีละส่วน
+2. ~~**หน้า ผลการรัน** ด้วย `GET /api/runs`, `GET /api/runs/[id]` และ `/screenshot`~~
+3. ~~**Dashboard** ต่อ `GET /api/stats?from&to&projectId`~~
+4. ~~**หน้า ตั้งค่า** สำหรับ secrets โดยห้ามแสดงค่าเดิม~~
+5. ~~หน้า demo `apps/web/public/demo-login.html`~~
+6. ~~**E2E ของ web** ด้วย Playwright; ตรวจ flow สร้าง/บันทึก/รันผ่าน/ล้มเหลว/screenshot/export/reconnect/dashboard~~
+7. ~~อัปเดต README~~ · ตรวจ `npm test`, `npx tsc --noEmit` และ commit แยกส่วน
 
 ## วิธีรัน dev
 ```
@@ -46,6 +52,7 @@ cp apps/web/.env.example apps/web/.env.local     # SECRET_KEY ต้องตร
 # runner: apps/runner/.env ใส่ ALLOWED_ORIGINS=http://localhost:4700  APP_PORT=4700
 npm run dev:runner      # พอร์ต 4800
 npm run dev:web         # พอร์ต 4700
+npm run test:e2e -w @test-studio/web # หลังบริการและ Postgres พร้อม
 ```
 พอร์ตที่ใช้: web 4700 (dev), runner 4800, runner tests 4851, db 5433. **อย่าใช้ 3100** (โปรเจกต์อื่นของผู้ใช้ใช้อยู่) และ PoC เดิมอยู่ที่ 3000
 

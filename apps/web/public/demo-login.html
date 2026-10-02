@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ระบบตัวอย่าง · เข้าสู่ระบบ</title>
+  <style>
+    * { box-sizing: border-box } body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #f1f3f8; color: #202433; font: 16px system-ui, sans-serif }
+    main { width: min(390px, calc(100vw - 32px)); padding: 30px; border-radius: 12px; background: white; box-shadow: 0 12px 40px #1a24401c }
+    h1 { margin: 0 0 22px; font-size: 24px } label { display: grid; gap: 6px; margin: 14px 0; font-size: 14px }
+    input { width: 100%; padding: 11px 12px; border: 1px solid #c9ced9; border-radius: 6px; font: inherit }
+    button { width: 100%; margin-top: 8px; padding: 12px; border: 0; border-radius: 6px; background: #3557e0; color: white; font: inherit; cursor: pointer }
+    #result { margin-top: 16px; color: #17804a }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>เข้าสู่ระบบ</h1>
+    <form id="login">
+      <label>อีเมล<input name="email" type="email" autocomplete="username" placeholder="อีเมล" required></label>
+      <label>รหัสผ่าน<input name="password" type="password" autocomplete="current-password" placeholder="รหัสผ่าน" required></label>
+      <button type="submit">เข้าสู่ระบบ</button>
+    </form>
+    <p id="result" role="status" aria-live="polite"></p>
+  </main>
+  <script>
+    document.querySelector('#login').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const form = new FormData(event.currentTarget);
+      const result = document.querySelector('#result');
+      if (form.get('email') === 'fail@test.local') {
+        result.textContent = 'ไม่สามารถเข้าสู่ระบบได้'; result.style.color = '#c83232';
+        return;
+      }
+      result.textContent = 'เข้าสู่ระบบสำเร็จ'; result.style.color = '#17804a';
+    });
+  </script>
+</body>
+</html>

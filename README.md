@@ -16,7 +16,7 @@
 | [packages/core](packages/core) | logic ร่วม (TypeScript + zod): schema ของ step, โปรโตคอล WebSocket, แปลงเป็นโค้ด/คำอธิบาย, รัน step + self-healing, AI (Gemini), กัน SSRF, เข้ารหัส, token | ✔ |
 | [packages/db](packages/db) | Postgres + Drizzle: โปรเจกต์, เทสเคส, ตัวแปรลับ (เข้ารหัส), ประวัติการรัน + ตัวย้ายข้อมูลจาก PoC | ✔ |
 | [apps/runner](apps/runner) | บริการ WebSocket ที่เปิด Chromium: screencast, บันทึก step, รันเทส, AI | ✔ ทำงานกับ UI ของ PoC ได้ครบ |
-| [apps/web](apps/web) | หน้าเว็บใหม่ (Next.js + ชุด UI ของ Grafana) | prototype ข้อมูลจำลอง ขั้นถัดไปต่อกับ runner |
+| [apps/web](apps/web) | Workspace, ผลการรัน, Dashboard และ secrets (Next.js + Grafana UI) | ต่อ API/runner แล้ว; Playwright E2E ผ่าน |
 | [poc-screencast](poc-screencast) | ต้นแบบเดิมที่ใช้งานได้ครบ | ใช้ต่อไปจนกว่า apps/web ทำได้เท่ากัน |
 
 ## เริ่มใช้งาน
@@ -38,6 +38,8 @@ npm run import-poc -w @test-studio/db -- ../../poc-screencast/data
 ตัวแปรลับถอดรหัสด้วย key ของ PoC แล้วเข้ารหัสใหม่ด้วย `SECRET_KEY` นี้ (เก็บ key ไว้ให้ดี เปลี่ยนแล้วถอดรหัสของเดิมไม่ได้)
 
 **รัน runner:** ดู [apps/runner/README.md](apps/runner/README.md)
+
+**รันเว็บและ runner สำหรับ Step 3:** ดู [apps/web/README.md](apps/web/README.md) และ [docs/step3-handoff.md](docs/step3-handoff.md) (พอร์ตเว็บ 4700, runner 4800; ห้ามใช้ 3100)
 
 ## ทดสอบ
 

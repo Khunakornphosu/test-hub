@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start -p 4700",
     "sync-assets": "node scripts/sync-assets.mjs",
+    "test:e2e": "playwright test",
     "postinstall": "node scripts/sync-assets.mjs",
     "predev": "node scripts/sync-assets.mjs",
     "prebuild": "node scripts/sync-assets.mjs"

@@ -1,110 +1,32 @@
 'use client';
-import { useState } from 'react';
-import { css } from '@emotion/css';
-import { dateTime, getDefaultTimeRange, type GrafanaTheme2, type SelectableValue, type TimeRange } from '@grafana/data';
-import { Button, Dropdown, Icon, IconButton, InlineField, InlineFieldRow, Menu, RefreshPicker, Select, TagList, TimeRangePicker, ToolbarButton, useStyles2 } from '@grafana/ui';
-import { GridLayout, useContainerWidth, type Layout } from 'react-grid-layout';
-import { FailuresPanel, RatePanel, RunsPanel, SlowestPanel, StatPanel, StatePanel } from './panels';
+import { useEffect, useState } from 'react';
+import { Alert, Badge, Button, Select } from '@grafana/ui';
+import { useProject } from '@/lib/project';
 
-// ตำแหน่งเริ่มต้นของ panel (กริด 24 คอลัมน์ เหมือน Grafana) ลาก/ย่อขยายได้
-const initial: Layout = [
-  { i: 'pass', x: 0, y: 0, w: 6, h: 4 },
-  { i: 'runs', x: 6, y: 0, w: 6, h: 4 },
-  { i: 'dur', x: 12, y: 0, w: 6, h: 4 },
-  { i: 'heal', x: 18, y: 0, w: 6, h: 4 },
-  { i: 'series', x: 0, y: 4, w: 16, h: 9 },
-  { i: 'rate', x: 16, y: 4, w: 8, h: 9 },
-  { i: 'state', x: 0, y: 13, w: 16, h: 8 },
-  { i: 'slow', x: 16, y: 13, w: 8, h: 8 },
-  { i: 'fail', x: 0, y: 21, w: 24, h: 9 },
-];
-
-const projects: SelectableValue<string>[] = [{ label: 'ทั้งหมด', value: 'all' }, { label: 'Shop', value: 'shop' }, { label: 'Admin', value: 'admin' }];
-const browsers: SelectableValue<string>[] = [{ label: 'Chromium', value: 'chromium' }, { label: 'Firefox', value: 'firefox' }, { label: 'WebKit', value: 'webkit' }];
+type Overview = { totals: { runs: number; passed: number; failed: number; avgMs: number; healedSteps: number; pendingHeals: number }; series: { t: number; passed: number; failed: number; avgMs: number }[]; slowest: { testId: number; name: string; avgMs: number }[]; timeline: { testId: number; name: string; states: ('p'|'f'|'h')[] }[]; failures: { runId: number; testId: number; testName: string; at: string; stepNumber: number | null; message: string }[] };
 
 export default function Dashboard() {
-  const s = useStyles2(styles);
-  const [range, setRange] = useState<TimeRange>(() => {
-    const r = getDefaultTimeRange();
-    const to = dateTime();
-    return { from: dateTime(to).subtract(7, 'd'), to, raw: { from: 'now-7d', to: 'now' } } as TimeRange & typeof r;
-  });
-  const [project, setProject] = useState<string>('all');
-  const [browser, setBrowser] = useState<string>('chromium');
-  const [refresh, setRefresh] = useState('30s');
-  const [layout, setLayout] = useState<Layout>(initial);
-  const { width, containerRef, mounted } = useContainerWidth();
-
-  const addMenu = (
-    <Menu>
-      <Menu.Item label="Visualization" icon="graph-bar" />
-      <Menu.Item label="Row" icon="bars" />
-      <Menu.Item label="Import จากเทสเคส" icon="import" />
-    </Menu>
-  );
-
-  return (
-    <div className={s.page}>
-      <div className={s.toolbar}>
-        <div className={s.title}>
-          <h1>ภาพรวมการทดสอบ</h1>
-          <IconButton name="star" tooltip="ทำเครื่องหมายเป็นรายการโปรด" aria-label="รายการโปรด" />
-          <TagList tags={['production', 'auto-refresh']} className={s.tags} />
-        </div>
-        <div className={s.actions}>
-          <Dropdown overlay={addMenu}>
-            <Button variant="secondary" icon="plus" size="sm">เพิ่ม <Icon name="angle-down" /></Button>
-          </Dropdown>
-          <ToolbarButton icon="cog" iconOnly tooltip="ตั้งค่าแดชบอร์ด" aria-label="ตั้งค่าแดชบอร์ด" />
-          <ToolbarButton icon="share-alt" iconOnly tooltip="แชร์" aria-label="แชร์" />
-          <TimeRangePicker value={range} onChange={setRange} onChangeTimeZone={() => {}} onMoveBackward={() => {}} onMoveForward={() => {}} onZoom={() => {}} timeZone="browser" />
-          <RefreshPicker onRefresh={() => {}} onIntervalChanged={setRefresh} value={refresh} intervals={['10s', '30s', '1m', '5m']} />
-          <ToolbarButton icon="monitor" iconOnly tooltip="โหมดแสดงเต็มจอ" aria-label="โหมดแสดงเต็มจอ" />
-        </div>
-      </div>
-
-      <div className={s.vars}>
-        <InlineFieldRow>
-          <InlineField label="โปรเจกต์"><Select width={18} options={projects} value={project} onChange={(v) => setProject(v.value ?? 'all')} /></InlineField>
-          <InlineField label="เบราว์เซอร์"><Select width={18} options={browsers} value={browser} onChange={(v) => setBrowser(v.value ?? 'chromium')} /></InlineField>
-        </InlineFieldRow>
-      </div>
-
-      <div ref={containerRef} className={s.grid}>
-        {mounted && (
-          <GridLayout
-            layout={layout}
-            width={width}
-            gridConfig={{ cols: 24, rowHeight: 30, margin: [8, 8], containerPadding: [0, 0] }}
-            dragConfig={{ handle: '.panel-drag-handle' }}
-            onLayoutChange={(l) => setLayout(l as Layout)}
-          >
-            <div key="pass"><StatPanel title="อัตราผ่าน" k="passRate" /></div>
-            <div key="runs"><StatPanel title="จำนวนการรันวันนี้" k="runs" /></div>
-            <div key="dur"><StatPanel title="เวลาเฉลี่ยต่อการรัน" k="duration" /></div>
-            <div key="heal"><StatPanel title="locator ที่ซ่อมอัตโนมัติ" k="healed" /></div>
-            <div key="series"><RunsPanel timeRange={range} /></div>
-            <div key="rate"><RatePanel timeRange={range} /></div>
-            <div key="state"><StatePanel /></div>
-            <div key="slow"><SlowestPanel /></div>
-            <div key="fail"><FailuresPanel /></div>
-          </GridLayout>
-        )}
-      </div>
-    </div>
-  );
+  const { projects } = useProject();
+  const [projectId, setProjectId] = useState('all');
+  const [days, setDays] = useState('7');
+  const [data, setData] = useState<Overview | null>(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const to = Date.now(), from = to - Number(days) * 86400_000;
+    const query = new URLSearchParams({ from: String(from), to: String(to) });
+    if (projectId !== 'all') query.set('projectId', projectId);
+    setLoading(true); fetch(`/api/stats?${query}`).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); setData(d); setError(''); }).catch((e) => setError(e.message)).finally(() => setLoading(false));
+  }, [projectId, days]);
+  const total = data?.totals;
+  const rate = total?.runs ? Math.round(total.passed * 100 / total.runs) : 0;
+  return <div style={{ padding: 20, display: 'grid', gap: 14 }}>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}><h1>ภาพรวมการทดสอบ</h1><div style={{ display: 'flex', gap: 8 }}><Select aria-label="โปรเจกต์" width={22} options={[{ label: 'ทุกโปรเจกต์', value: 'all' }, ...projects.map((p) => ({ label: p.name, value: String(p.id) }))]} value={projectId} onChange={(v) => setProjectId(v.value ?? 'all')} /><Select aria-label="ช่วงเวลา" width={16} options={[{ label: '24 ชั่วโมง', value: '1' }, { label: '7 วัน', value: '7' }, { label: '30 วัน', value: '30' }]} value={days} onChange={(v) => setDays(v.value ?? '7')} /><Button icon="sync" onClick={() => setDays((v) => v)}>รีเฟรช</Button></div></div>
+    {error && <Alert severity="error" title={error} />}{loading && !data ? <span role="status">กำลังโหลดสถิติ…</span> : data && <>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10 }}>{[['อัตราผ่าน', `${rate}%`], ['จำนวนการรัน', total!.runs], ['เวลาเฉลี่ย', `${(total!.avgMs / 1000).toFixed(2)} วินาที`], ['ซ่อม locator', total!.healedSteps], ['รอยืนยัน', total!.pendingHeals]].map(([label, value]) => <div key={String(label)} style={{ border: '1px solid var(--border-weak)', borderRadius: 6, padding: 14 }}><small>{label}</small><h2 style={{ margin: '8px 0 0' }}>{value}</h2></div>)}</div>
+      <section style={{ border: '1px solid var(--border-weak)', borderRadius: 6, padding: 14 }}><h2>การรันตามช่วงเวลา</h2><div style={{ display: 'flex', height: 160, alignItems: 'end', gap: 3 }}>{data.series.map((x) => { const max = Math.max(1, ...data.series.map((p) => p.passed + p.failed)); const height = Math.max(2, (x.passed + x.failed) / max * 140); return <div key={x.t} title={`${new Date(x.t).toLocaleString('th-TH')} ผ่าน ${x.passed} ไม่ผ่าน ${x.failed}`} style={{ flex: 1, height, display: 'flex', alignItems: 'end', background: 'var(--green-shade)', borderBottom: `${Math.max(1, x.failed / Math.max(1, x.passed + x.failed) * height)}px solid var(--error-text)` }} />; })}</div><small>สีเขียว = ผ่าน · สีแดง = ไม่ผ่าน</small></section>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))', gap: 12 }}><section style={{ border: '1px solid var(--border-weak)', borderRadius: 6, padding: 14 }}><h2>สถานะรายเทส</h2>{data.timeline.map((row) => <div key={row.testId} style={{ display: 'grid', gridTemplateColumns: '150px 1fr', gap: 8, margin: '8px 0' }}><span>{row.name}</span><div style={{ display: 'flex', gap: 2 }}>{row.states.map((v, i) => <span key={i} title={v === 'p' ? 'ผ่าน' : v === 'f' ? 'ไม่ผ่าน' : 'ซ่อมแล้ว'} style={{ flex: 1, height: 12, borderRadius: 2, background: v === 'p' ? '#73bf69' : v === 'f' ? '#f2495c' : '#ff9830' }} />)}</div></div>)}</section>
+      <section style={{ border: '1px solid var(--border-weak)', borderRadius: 6, padding: 14 }}><h2>เทสที่ใช้เวลานาน</h2>{data.slowest.map((x) => <div key={x.testId} style={{ display: 'flex', justifyContent: 'space-between', padding: 8 }}><span>{x.name}</span><Badge color="orange" text={`${(x.avgMs / 1000).toFixed(2)} วินาที`} /></div>)}</section></div>
+      <section style={{ border: '1px solid var(--border-weak)', borderRadius: 6, padding: 14 }}><h2>รายการไม่ผ่าน</h2>{data.failures.length ? data.failures.map((f) => <div key={f.runId} style={{ padding: 8, borderBottom: '1px solid var(--border-weak)' }}><a href={`/runs?run=${f.runId}`}>{f.testName} · ขั้นที่ {f.stepNumber ?? '—'}</a><p>{f.message}</p></div>) : <p>ไม่มีรายการไม่ผ่านในช่วงเวลานี้</p>}</section>
+    </>}</div>;
 }
-
-const styles = (theme: GrafanaTheme2) => ({
-  page: css({ padding: theme.spacing(2) }),
-  toolbar: css({ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: theme.spacing(2), flexWrap: 'wrap', marginBottom: theme.spacing(1) }),
-  title: css({ display: 'flex', alignItems: 'center', gap: theme.spacing(1), h1: { fontSize: theme.typography.h3.fontSize, margin: 0, fontWeight: theme.typography.fontWeightMedium } }),
-  tags: css({ marginLeft: theme.spacing(1), justifyContent: 'flex-start' }),
-  actions: css({ display: 'flex', alignItems: 'center', gap: theme.spacing(1) }),
-  vars: css({ marginBottom: theme.spacing(1) }),
-  grid: css({
-    '.react-grid-item.react-grid-placeholder': { background: theme.colors.primary.main, opacity: 0.2, borderRadius: theme.shape.radius.default },
-    '.react-grid-item > div': { height: '100%' },
-    '.react-resizable-handle': { zIndex: 2 },
-  }),
-});
