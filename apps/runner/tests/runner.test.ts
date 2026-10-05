@@ -23,7 +23,7 @@ let server: Server;
 let projectId: number;
 let demo: Record<'email' | 'password', { x: number; y: number }>;
 const opened = new Set<Client>();
-const config: RunnerConfig = { port: PORT, appPort: PORT, host: '127.0.0.1', databaseUrl: '', secretKey: 'k', tokenSecret: SECRET, allowedOrigins: [ORIGIN], maxSessions: 2, runMigrations: false };
+const config: RunnerConfig = { port: PORT, appPort: PORT, host: '127.0.0.1', databaseUrl: '', secretKey: 'k', tokenSecret: SECRET, allowedOrigins: [ORIGIN], maxSessions: 2, runMigrations: false, worker: { enabled: false, pollMs: 60_000 } };
 
 beforeAll(async () => {
   store = openStore({ url: process.env.TEST_DATABASE_URL, cipher: createCipher(null, { SECRET_KEY: 'runner-test-key' }), max: 3 });

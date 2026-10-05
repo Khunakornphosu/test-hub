@@ -15,6 +15,7 @@ const NAV: { href: string; label: string; icon: IconName; section?: string }[] =
   { href: '/flows', label: 'Test Flow', icon: 'sitemap' },
   { href: '/workspace', label: 'Workspace', icon: 'edit' },
   { href: '/runs', label: 'ผลการรัน', icon: 'history' },
+  { href: '/automation', label: 'รันอัตโนมัติ', icon: 'clock-nine' },
   { href: '/settings', label: 'ตั้งค่า', icon: 'cog', section: 'ผู้ดูแล' },
 ];
 
@@ -24,6 +25,7 @@ const crumbs: Record<string, string[]> = {
   '/flows': ['Test Flow'],
   '/workspace': ['เทสเคส', 'Workspace'],
   '/runs': ['ผลการรัน'],
+  '/automation': ['รันอัตโนมัติ'],
   '/settings': ['ผู้ดูแล', 'ตั้งค่า'],
 };
 

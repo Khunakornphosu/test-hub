@@ -12,6 +12,10 @@ export function projectsRepo(db: Db) {
     async list(): Promise<Project[]> {
       return db.select({ id: projects.id, name: projects.name }).from(projects).orderBy(asc(projects.id));
     },
+    async get(id: number): Promise<Project | null> {
+      const [row] = await db.select({ id: projects.id, name: projects.name }).from(projects).where(eq(projects.id, id));
+      return row ?? null;
+    },
     async create(name: string): Promise<number> {
       const [row] = await db.insert(projects).values({ name }).returning({ id: projects.id });
       return row!.id;

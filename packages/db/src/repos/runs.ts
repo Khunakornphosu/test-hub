@@ -6,6 +6,7 @@ import { runs } from '../schema.js';
 
 export interface NewRun {
   testId: number;
+  batchId?: number | null;
   startedAt: Date;
   durationMs: number;
   passed: boolean;
@@ -47,6 +48,7 @@ export function runsRepo(db: Db) {
         .insert(runs)
         .values({
           testId: run.testId,
+          batchId: run.batchId ?? null,
           startedAt: run.startedAt,
           durationMs: run.durationMs,
           passed: run.passed,

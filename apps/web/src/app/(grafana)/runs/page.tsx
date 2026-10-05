@@ -13,7 +13,7 @@ type Detail = Recent & { results: { status: string; action?: string; label?: str
 type Status = 'all' | 'passed' | 'failed';
 type Scope = 'current' | 'all';
 /** scope current = โปรเจกต์ที่เลือกใน sidebar, all = ทุกโปรเจกต์ */
-interface Filters { scope: Scope; test: number | null; status: Status }
+interface Filters { scope: Scope; test: number | null; status: Status; batch: number | null }
 
 const STATUS_OPTIONS: { label: string; value: Status }[] = [{ label: 'ทั้งหมด', value: 'all' }, { label: 'ผ่าน', value: 'passed' }, { label: 'ไม่ผ่าน', value: 'failed' }];
 const SCOPE_OPTIONS: { label: string; value: Scope }[] = [{ label: 'โปรเจกต์นี้', value: 'current' }, { label: 'ทุกโปรเจกต์', value: 'all' }];
@@ -23,6 +23,7 @@ function readFilters(): Filters {
   const status = q.get('status');
   return {
     scope: q.get('project') === 'all' ? 'all' : 'current',
+    batch: Number(q.get('batch')) || null,
     test: Number(q.get('test')) || null,
     status: status === 'passed' || status === 'failed' ? status : 'all',
   };
@@ -31,7 +32,7 @@ function readFilters(): Filters {
 export default function Page() {
   const s = useStyles2(styles);
   const { projects, current } = useProject();
-  const [filters, setFilters] = useState<Filters>({ scope: 'current', test: null, status: 'all' });
+  const [filters, setFilters] = useState<Filters>({ scope: 'current', test: null, status: 'all', batch: null });
   const [ready, setReady] = useState(false);
   const [runs, setRuns] = useState<Recent[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -52,6 +53,7 @@ export default function Page() {
     lastProject.current = id;
   }, [current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const tests = useQuery({ queryKey: ['tests', projectId], queryFn: () => api.tests(projectId!), enabled: projectId != null });
+  const batch = useQuery({ queryKey: ['batch', filters.batch], queryFn: () => api.batch(filters.batch!), enabled: filters.batch != null });
   const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
   const waitingForProject = !allProjects && !current;
 
@@ -61,7 +63,7 @@ export default function Page() {
     setPage(1);
     const q = new URLSearchParams(location.search);
     q.delete('run');
-    for (const [key, value] of [['project', next.scope === 'all' ? 'all' : null], ['test', next.test], ['status', next.status === 'all' ? null : next.status]] as const) {
+    for (const [key, value] of [['project', next.scope === 'all' ? 'all' : null], ['batch', next.batch], ['test', next.test], ['status', next.status === 'all' ? null : next.status]] as const) {
       if (value == null) q.delete(key);
       else q.set(key, String(value));
     }
@@ -74,9 +76,10 @@ export default function Page() {
     if (projectId != null) q.set('projectId', String(projectId));
     if (filters.test != null) q.set('testId', String(filters.test));
     if (filters.status !== 'all') q.set('status', filters.status);
+    if (filters.batch != null) q.set('batchId', String(filters.batch));
     setLoading(true);
     fetch(`/api/runs?${q}`).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); setRuns(d.items); setTotal(d.total); }).catch((e) => setError(e.message)).finally(() => setLoading(false));
-  }, [ready, waitingForProject, page, pageSize, projectId, filters.test, filters.status]);
+  }, [ready, waitingForProject, page, pageSize, projectId, filters.test, filters.status, filters.batch]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { const run = Number(new URLSearchParams(location.search).get('run')); if (run) void openRun(run); }, []);
   const openRun = async (id: number) => { try { const r = await fetch(`/api/runs/${id}`); const d = await r.json(); if (!r.ok) throw new Error(d.error); setDetail(d); } catch (e) { setError((e as Error).message); } };
@@ -92,6 +95,9 @@ export default function Page() {
       {detail.hasScreenshot && <><h3>ภาพหน้าจอเมื่อจบการรัน</h3><img src={`/api/runs/${detail.id}/screenshot`} alt="ภาพหน้าจอผลการรัน" style={{ maxWidth: '100%', border: '1px solid var(--border-weak)' }} /></>}
     </section>}
     <section className={s.section}>
+      {batch.data && <Alert severity="info" title={`รอบการรัน #${batch.data.id} · ${batch.data.label}`} onRemove={() => update({ batch: null })}>
+        {batch.data.environmentName ? `environment ${batch.data.environmentName} · ` : ''}ผ่าน {batch.data.total - batch.data.failed}/{batch.data.total} · แสดงเฉพาะผลของรอบนี้ (กด × เพื่อดูทั้งหมด)
+      </Alert>}
       <div className={s.filters} role="search" aria-label="ตัวกรองผลการรัน">
         <RadioButtonGroup<Scope> aria-label="ขอบเขต" options={SCOPE_OPTIONS} value={filters.scope} onChange={(scope) => update({ scope, test: null })} />
         <Select aria-label="เทส" width={30} isClearable disabled={allProjects} placeholder={allProjects ? 'ทุกเทส (ทุกโปรเจกต์)' : 'ทุกเทส'} options={(tests.data ?? []).map((t) => ({ label: t.name, value: t.id }))} value={filters.test ?? null} onChange={(v) => update({ test: (v?.value as number | undefined) ?? null })} />

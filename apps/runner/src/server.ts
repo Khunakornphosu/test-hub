@@ -7,6 +7,7 @@ import { chromium, type Browser } from 'playwright';
 import { WebSocketServer, type WebSocket } from 'ws';
 import type { RunnerConfig } from './config.js';
 import { Session } from './session.js';
+import { startWorker, type Worker, type WorkerOptions } from './worker.js';
 
 const LOOPBACK_HOSTS = (port: number) => new Set([`localhost:${port}`, `127.0.0.1:${port}`, `[::1]:${port}`]);
 /** ถ้าผู้ใช้เชื่อมช้าจนข้อมูลค้างเกินนี้ จะทิ้งเฟรมภาพ (ไม่ทิ้งข้อความอื่น) กันหน่วยความจำบวม */
@@ -17,12 +18,16 @@ export interface RunnerOptions {
   config: RunnerConfig;
   /** ค่าตั้งของ URL guard (ALLOWED_HOSTS, ALLOW_PRIVATE_NETWORK) ค่าเริ่มต้น = process.env */
   guardEnv?: Record<string, string | undefined>;
+  /** ตัวส่งแจ้งเตือนของ worker (เทสใช้ตัวปลอม) */
+  notify?: WorkerOptions['notify'];
 }
 
 export interface Runner {
   /** ผูกกับ event 'upgrade' ของ http server: server.on('upgrade', runner.handleUpgrade) */
   handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): void;
   readonly sessionCount: number;
+  /** worker รันอัตโนมัติ (null = ปิดด้วย WORKER=false) */
+  readonly worker: Worker | null;
   close(): Promise<void>;
 }
 
@@ -66,7 +71,8 @@ export function authorizeUpgrade(req: IncomingMessage, config: RunnerConfig, ses
   return { ok: true, user };
 }
 
-export async function createRunner({ store, config, guardEnv = process.env }: RunnerOptions): Promise<Runner> {
+export async function createRunner(options: RunnerOptions): Promise<Runner> {
+  const { store, config, guardEnv = process.env } = options;
   // ทุก request ของเบราว์เซอร์ผ่าน proxy ที่กันการเข้าถึงเครือข่ายภายใน (SSRF)
   const urlGuard = createUrlGuard({ appPort: config.appPort, env: guardEnv });
   const guardProxy = await startGuardProxy(urlGuard);
@@ -74,6 +80,8 @@ export async function createRunner({ store, config, guardEnv = process.env }: Ru
   // WebRTC ส่ง UDP ตรงโดยไม่ผ่าน proxy (STUN/ICE ไปที่อยู่ภายในได้) จึงบังคับให้ใช้เฉพาะเส้นทางที่ผ่าน proxy
   const args = ['--disable-dev-shm-usage', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'];
   const browser: Browser = await chromium.launch({ headless: true, args, ...guardProxy.launchOptions });
+
+  const worker = config.worker.enabled ? startWorker({ store, browser, urlGuard, pollMs: config.worker.pollMs, publicAppUrl: config.worker.publicAppUrl, notify: options.notify }) : null;
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
   const sessions = new Set<Session>();
@@ -111,7 +119,9 @@ export async function createRunner({ store, config, guardEnv = process.env }: Ru
     get sessionCount() {
       return sessions.size;
     },
+    worker,
     async close() {
+      await worker?.stop();
       for (const ws of wss.clients) ws.close(1001, 'server shutting down');
       await Promise.allSettled([...sessions].map((s) => s.dispose()));
       await browser.close().catch(() => {});

@@ -2,8 +2,8 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { ACCESS_COOKIE, accessCookieValid, accessPassword } from '@/server/access';
 
-// เปิดได้โดยไม่ต้องล็อกอิน: หน้าล็อกอินและไฟล์ที่หน้านั้นใช้, health check และหน้าทดสอบตัวอย่างที่เบราว์เซอร์ของ runner เปิด
-const PUBLIC = [/^\/login$/, /^\/api\/(login|health)$/, /^\/_next\//, /^\/public\/build\//, /^\/favicon\.ico$/, /^\/demo-[\w-]+\.html$/];
+// เปิดได้โดยไม่ต้องล็อกอิน: หน้าล็อกอินและไฟล์ที่หน้านั้นใช้, health check, API ของ CI (ตรวจ token เอง) และหน้าทดสอบตัวอย่างที่เบราว์เซอร์ของ runner เปิด
+const PUBLIC = [/^\/login$/, /^\/api\/(login|health)$/, /^\/api\/ci\//, /^\/_next\//, /^\/public\/build\//, /^\/favicon\.ico$/, /^\/demo-[\w-]+\.html$/];
 
 export function proxy(request: NextRequest) {
   const password = accessPassword();
