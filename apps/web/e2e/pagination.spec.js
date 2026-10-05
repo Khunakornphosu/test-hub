@@ -71,12 +71,14 @@ test('ผลการรันแบ่งหน้าจาก server', async (
 test('รายการ secret แบ่งหน้าเมื่อเกิน 10 รายการ', async ({ page, request }) => {
   for (let i = 1; i <= 12; i++) await request.put(`/api/projects/${projectId}/secrets/KEY_${String(i).padStart(2, '0')}`, { data: { value: 'x' } });
   await page.goto('/settings');
+  const secretTable = page.getByRole('table').filter({ hasText: 'ค่าที่เก็บ' });
+  const secretRows = secretTable.locator('tbody tr');
   const pager = page.getByRole('navigation', { name: 'เปลี่ยนหน้า' });
   await expect(pager).toContainText('แสดง 1–12 จาก 12 secret');
   await pager.getByLabel('จำนวนต่อหน้า').click();
   await page.getByRole('option', { name: '10', exact: true }).click();
-  await expect(page.locator('tbody tr')).toHaveCount(10);
+  await expect(secretRows).toHaveCount(10);
   await pager.getByRole('button', { name: 'หน้า 2', exact: true }).click();
-  await expect(page.locator('tbody tr')).toHaveCount(2);
-  await expect(page.locator('tbody')).toContainText('KEY_12');
+  await expect(secretRows).toHaveCount(2);
+  await expect(secretTable).toContainText('KEY_12');
 });

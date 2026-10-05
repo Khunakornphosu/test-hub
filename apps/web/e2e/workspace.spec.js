@@ -78,7 +78,7 @@ test('สร้างและบันทึก login, รันผ่านแ
   await page.getByRole('button', { name: 'ดูผลการรัน' }).click();
   await expect(page).toHaveURL(/\/runs\?run=/);
   await expect(page.getByRole('heading', { name: 'ผลแต่ละขั้นตอน' })).toBeVisible();
-  await expect(page.getByText(/ไม่พบ|ไม่ตรง|หา element/i)).toBeVisible();
+  await expect(page.getByText(/ไม่พบ|ไม่ตรง|หา element/i).first()).toBeVisible();
   await expect(page.getByAltText('ภาพหน้าจอผลการรัน')).toBeVisible();
 
   // ตัดการเชื่อมต่อ WS แรกหลัง ready แล้วตรวจว่า Workspace ต่อใหม่ได้เอง

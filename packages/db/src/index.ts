@@ -6,6 +6,7 @@ import { secretsRepo } from './repos/secrets.js';
 import { statsRepo } from './repos/stats.js';
 import { testsRepo } from './repos/tests.js';
 import { flowsRepo } from './repos/flows.js';
+import { backupsRepo } from './repos/backups.js';
 import { batchesRepo, channelsRepo, environmentsRepo, schedulesRepo, tokensRepo } from './repos/automation.js';
 
 export * from './schema.js';
@@ -15,6 +16,7 @@ export { importPoc, type ImportReport } from './import-poc.js';
 export type { Project } from './repos/projects.js';
 export type { TestRecord, TestSummary } from './repos/tests.js';
 export type { FlowRecord, FlowSummary } from './repos/flows.js';
+export type { BackupRecord } from './repos/backups.js';
 export type { ApiTokenSummary, BatchRecord, ChannelSummary, ChannelWithConfig, EnvironmentRecord, NewBatch, ScheduleInput, ScheduleRecord } from './repos/automation.js';
 export type { NewRun, RecentRun, RunDetail, RunSummary } from './repos/runs.js';
 export type { BucketPoint, FailureItem, Overview, StatsQuery, TimelineState } from './repos/stats.js';
@@ -33,6 +35,7 @@ export function createRepos(db: Db, cipher: Cipher) {
     channels: channelsRepo(db, cipher),
     tokens: tokensRepo(db),
     batches: batchesRepo(db),
+    backups: backupsRepo(db),
   };
 }
 export type Repos = ReturnType<typeof createRepos>;

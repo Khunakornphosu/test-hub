@@ -3,6 +3,10 @@ import { createServer, type Server } from 'node:http';
 import { createCipher, createUrlGuard, type BatchNotice, type ChannelConfig } from '@test-studio/core';
 import { openStore, type Store } from '@test-studio/db';
 import { chromium, type Browser } from 'playwright';
+import { execFileSync } from 'node:child_process';
+import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { startWorker, type Worker } from '../src/worker.js';
 
@@ -14,6 +18,13 @@ let worker: Worker | null = null;
 const sent: { config: ChannelConfig; notice: BatchNotice }[] = [];
 const visited: string[] = [];
 let flakyHits = 0;
+const dbContainer = (() => {
+  try {
+    return execFileSync('docker', ['compose', 'ps', '-q', 'db'], { cwd: path.resolve(import.meta.dirname, '../../..') }).toString().trim() || null;
+  } catch {
+    return null;
+  }
+})();
 
 beforeAll(async () => {
   store = openStore({ url: process.env.TEST_DATABASE_URL, cipher: createCipher(null, { SECRET_KEY: 'worker-test-key' }), max: 3 });
@@ -152,4 +163,25 @@ describe('worker', () => {
     expect(items[0]).toMatchObject({ scheduleId, trigger: 'schedule', status: 'done', total: 1, failed: 0 });
     expect((await store.repos.schedules.get(scheduleId))!.nextRunAt.getTime()).toBeGreaterThan(Date.now());
   }, 60_000);
+
+  it.skipIf(!dbContainer)('สำรองฐานข้อมูลวันละครั้งตอนถึงเวลา', async () => {
+    await worker?.stop();
+    const dir = await mkdtemp(path.join(tmpdir(), 'ts-worker-backup-'));
+    try {
+      const urlGuard = createUrlGuard({ appPort: 1, env: {} });
+      worker = startWorker({ store, browser, urlGuard, pollMs: 3_600_000, log: () => {}, backup: { enabled: true, dir, hour: 0, keepDays: 14, dockerContainer: dbContainer!, databaseUrl: process.env.TEST_DATABASE_URL! } });
+      await worker.tick();
+      const [last] = await store.repos.backups.recent(1);
+      expect(last).toMatchObject({ ok: true, error: null });
+      expect(await readdir(dir)).toEqual([path.basename(last!.file!)]);
+      // วันเดียวกันไม่สำรองซ้ำ
+      await worker.tick();
+      expect(await readdir(dir)).toHaveLength(1);
+    } finally {
+      await worker?.stop();
+      worker = null;
+      await rm(dir, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
+

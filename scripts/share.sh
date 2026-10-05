@@ -94,7 +94,7 @@ cmd_start() {
   log "เปิด runner และหน้าเว็บ"
   # ค่าที่ส่งผ่าน environment ทับค่าใน .env / .env.local (ทั้ง runner และ Next ไม่เขียนทับค่าที่ตั้งไว้แล้ว)
   start_bg runner "$ROOT/apps/runner" env HOST=127.0.0.1 PORT=$RUNNER_PORT APP_PORT=$WEB_PORT \
-    RUNNER_TOKEN_SECRET="$token_secret" ALLOWED_ORIGINS="$web_url" PUBLIC_APP_URL="$web_url" RUN_MIGRATIONS=true node dist/main.js
+    RUNNER_TOKEN_SECRET="$token_secret" ALLOWED_ORIGINS="$web_url" PUBLIC_APP_URL="$web_url" BACKUP_DIR="$ROOT/backups" RUN_MIGRATIONS=true node dist/main.js
   start_bg web "$ROOT/apps/web" env NODE_ENV=production ALLOW_ANONYMOUS_DEV_USER=true ACCESS_PASSWORD="$password" \
     RUNNER_TOKEN_SECRET="$token_secret" RUNNER_WS_URL="${runner_url/https:/wss:}/ws" npx next start -p $WEB_PORT
 

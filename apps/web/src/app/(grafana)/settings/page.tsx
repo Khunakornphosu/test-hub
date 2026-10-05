@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import type { GrafanaTheme2 } from '@grafana/data';
 import { Alert, Button, Field, Input, useStyles2 } from '@grafana/ui';
+import BackupSection from '@/components/g/BackupSection';
 import TablePager, { usePaged } from '@/components/g/TablePager';
 import { api } from '@/lib/api';
 import { useProject } from '@/lib/project';
@@ -23,6 +24,7 @@ export default function Page() {
   return <div className={s.page}><header className={s.header}><h1>ตั้งค่า</h1><p>{current ? <>โปรเจกต์ <b>{current.name}</b> · </> : null}จัดการตัวแปรลับที่ใช้ในเทส โดยค่าที่บันทึกไว้จะไม่แสดงบนหน้านี้</p></header>{error && <Alert severity="error" title={error} onRemove={() => setError('')} />}{notice && <Alert severity="success" title={notice} onRemove={() => setNotice('')} />}
     {isLoading ? <span role="status">กำลังโหลดการตั้งค่า…</span> : current ? <section className={s.section}><div className={s.sectionHead}><div><h2>ตัวแปรลับ</h2><p>เก็บค่าที่ใช้ในขั้นตอนทดสอบ เช่น อีเมลหรือรหัสผ่าน</p></div></div><div className={s.form}><Field label="ชื่อ secret" description="ใช้ตัวพิมพ์ใหญ่ ตัวเลข และ _ เช่น TEST_EMAIL"><Input value={name} onChange={(e) => setName(e.currentTarget.value)} placeholder="เช่น TEST_EMAIL" /></Field><Field label="ค่า"><Input type="password" autoComplete="new-password" value={value} onChange={(e) => setValue(e.currentTarget.value)} placeholder="กรอกค่าที่ต้องการเก็บ" /></Field><Button className={s.save} variant="primary" icon="save" disabled={!name.trim() || !value} onClick={() => void save()}>บันทึก secret</Button></div>
       <div className={s.listHead}><h3>รายการ secret</h3><span>{names.length} รายการ</span></div>{names.length ? <div className={s.secretTableWrap}><table className={s.secretTable}><thead><tr><th>ชื่อ</th><th>ค่าที่เก็บ</th><th>จัดการ</th></tr></thead><tbody>{pagedNames.visible.map((n) => <tr key={n}><td><b>{n}</b></td><td><span aria-label="ซ่อนค่า secret">••••••••</span></td><td><Button size="sm" variant="secondary" icon="trash-alt" onClick={() => void remove(n)}>ลบ</Button></td></tr>)}</tbody></table><TablePager {...pagedNames.pager} label="secret" /></div> : <p className={s.empty}>ยังไม่มี secret ในโปรเจกต์นี้</p>}</section> : <p>ไม่พบโปรเจกต์</p>}
+    <BackupSection />
   </div>;
 }
 

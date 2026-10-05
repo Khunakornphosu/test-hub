@@ -179,3 +179,14 @@ export const runTraces = pgTable('run_traces', {
   data: bytea('data').notNull(),
   createdAt: createdAt(),
 });
+
+/** ประวัติการสำรองฐานข้อมูล (ไฟล์อยู่ในเครื่องที่รัน runner) */
+export const backups = pgTable('backups', {
+  id: serial('id').primaryKey(),
+  file: text('file'),
+  bytes: integer('bytes'),
+  ok: boolean('ok').notNull(),
+  error: text('error'),
+  durationMs: integer('duration_ms').notNull(),
+  createdAt: createdAt(),
+});

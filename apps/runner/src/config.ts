@@ -1,4 +1,6 @@
+import path from 'node:path';
 import { z } from 'zod';
+import type { BackupConfig } from './backup.js';
 
 // ค่าตั้งทั้งหมดของ runner มาจาก environment (ตรวจรูปแบบตอนเริ่ม ถ้าผิดจะไม่ยอมเริ่มและบอกเหตุผล)
 const bool = z.enum(['true', 'false', '1', '0', '']).transform((v) => v === 'true' || v === '1');
@@ -23,6 +25,14 @@ const envSchema = z.object({
   WORKER_POLL_SECONDS: z.coerce.number().int().min(1).max(3600).default(15),
   /** รันอัตโนมัติ: พังแล้วรันซ้ำกี่ครั้ง ถ้าครั้งหลังผ่านจะติดป้าย "ไม่เสถียร" (0 = ไม่รันซ้ำ) */
   WORKER_RETRIES: z.coerce.number().int().min(0).max(3).default(1),
+  /** สำรองฐานข้อมูลวันละครั้ง (ทำโดย worker) */
+  BACKUP: z.enum(['true', 'false', '1', '0']).default('true').transform((v) => v === 'true' || v === '1'),
+  /** โฟลเดอร์เก็บไฟล์สำรอง (ค่าเริ่มต้น = backups/ ที่ root ของ repo เมื่อรันจาก apps/runner) ตั้งเป็นโฟลเดอร์ที่ sync ขึ้น cloud ได้ */
+  BACKUP_DIR: z.string().default('../../backups'),
+  BACKUP_HOUR: z.coerce.number().int().min(0).max(23).default(3),
+  BACKUP_KEEP_DAYS: z.coerce.number().int().min(1).max(365).default(14),
+  /** ชื่อคอนเทนเนอร์ Postgres เพื่อรัน pg_dump ข้างใน (ใช้เมื่อ pg_dump ในเครื่องเก่ากว่า server) */
+  BACKUP_DOCKER_CONTAINER: z.string().optional(),
   /** URL ของหน้าเว็บ ใช้ทำลิงก์ "ดูผล" ในแจ้งเตือน เช่น https://test-studio.example.com */
   PUBLIC_APP_URL: z.string().url().optional(),
 });
@@ -38,6 +48,7 @@ export interface RunnerConfig {
   maxSessions: number;
   runMigrations: boolean;
   worker: { enabled: boolean; pollMs: number; retries?: number; publicAppUrl?: string };
+  backup?: BackupConfig;
 }
 
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1']);
@@ -63,5 +74,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     maxSessions: e.MAX_SESSIONS,
     runMigrations: e.RUN_MIGRATIONS,
     worker: { enabled: e.WORKER, pollMs: e.WORKER_POLL_SECONDS * 1000, retries: e.WORKER_RETRIES, publicAppUrl: e.PUBLIC_APP_URL },
+    backup: { enabled: e.BACKUP, dir: path.resolve(e.BACKUP_DIR), hour: e.BACKUP_HOUR, keepDays: e.BACKUP_KEEP_DAYS, dockerContainer: e.BACKUP_DOCKER_CONTAINER || undefined },
   };
 }

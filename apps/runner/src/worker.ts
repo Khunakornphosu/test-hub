@@ -17,6 +17,7 @@ import type { BatchRecord, Store } from '@test-studio/db';
 import type { Browser } from 'playwright';
 import { runSteps, type ExecContext, type StepWithId } from './executor.js';
 import { analyzeFailure, startTrace, stopTrace } from './insights.js';
+import { backupDue, createBackup, pruneBackups, type BackupConfig } from './backup.js';
 
 /** รอบที่ค้างสถานะ "กำลังรัน" นานเกินนี้ถือว่า runner ดับไปแล้ว */
 const STALE_MS = 2 * 60 * 60_000;
@@ -28,6 +29,8 @@ export interface WorkerOptions {
   pollMs: number;
   /** จำนวนครั้งที่รันซ้ำเมื่อพัง (0 = ไม่รันซ้ำ) */
   retries?: number;
+  /** สำรองฐานข้อมูลวันละครั้ง (ไม่ระบุ = ไม่สำรอง) */
+  backup?: BackupConfig & { databaseUrl: string };
   /** URL ของหน้าเว็บ ใช้ทำลิงก์ในแจ้งเตือน */
   publicAppUrl?: string;
   /** เปลี่ยนตัวส่งแจ้งเตือนได้ (เทส) */
@@ -203,7 +206,30 @@ export function startWorker(options: WorkerOptions): Worker {
     }
   }
 
+  /** ถึงเวลาแล้วสำรองฐานข้อมูล (ล้มเหลวแล้วรอ 1 ชั่วโมงก่อนลองใหม่ ไม่ให้รัวทุกรอบ) */
+  async function maybeBackup(): Promise<void> {
+    const backup = options.backup;
+    if (!backup?.enabled) return;
+    const [last] = await store.repos.backups.recent(1);
+    if (last && !last.ok && Date.now() - last.createdAt.getTime() < 60 * 60_000) return;
+    if (!backupDue(new Date(), backup.hour, (await store.repos.backups.lastSuccess())?.createdAt ?? null)) return;
+    await store.repos.backups.exclusive(async () => {
+      if (!backupDue(new Date(), backup.hour, (await store.repos.backups.lastSuccess())?.createdAt ?? null)) return;
+      const started = Date.now();
+      try {
+        const { file, bytes } = await createBackup(backup.databaseUrl, backup);
+        await store.repos.backups.record({ file, bytes, ok: true, error: null, durationMs: Date.now() - started });
+        const removed = await pruneBackups(backup.dir, backup.keepDays);
+        log(`สำรองฐานข้อมูลแล้ว: ${file} (${Math.round(bytes / 1024)} KB)${removed.length ? ` · ลบไฟล์เก่า ${removed.length} ไฟล์` : ''}`);
+      } catch (err) {
+        await store.repos.backups.record({ file: null, bytes: null, ok: false, error: (err as Error).message.slice(0, 500), durationMs: Date.now() - started });
+        log(`สำรองฐานข้อมูลไม่สำเร็จ: ${(err as Error).message}`);
+      }
+    });
+  }
+
   async function work(): Promise<void> {
+    await maybeBackup();
     await store.repos.batches.failStale(STALE_MS);
     await store.repos.runs.pruneTraces({ maxAgeDays: 14, keep: 500 });
     await store.repos.schedules.enqueueDue();

@@ -119,3 +119,20 @@ describe('run batches', () => {
     expect(page.items.map((b) => b.id)).toEqual([stuck, second]);
   });
 });
+
+describe('backups', () => {
+  it('runner สองตัวสำรองพร้อมกันไม่ได้ และเก็บประวัติล่าสุด', async () => {
+    let release!: () => void;
+    const holding = store.repos.backups.exclusive(() => new Promise<string>((r) => { release = () => r('first'); }));
+    await new Promise((r) => setTimeout(r, 100));
+    expect(await store.repos.backups.exclusive(async () => 'second')).toBeNull();
+    release();
+    expect(await holding).toBe('first');
+    expect(await store.repos.backups.exclusive(async () => 'after')).toBe('after');
+
+    await store.repos.backups.record({ file: '/b/a.sql.gz', bytes: 10, ok: true, error: null, durationMs: 5 });
+    await store.repos.backups.record({ file: null, bytes: null, ok: false, error: 'pg_dump ล้มเหลว', durationMs: 1 });
+    expect((await store.repos.backups.recent(5)).map((b) => b.ok)).toEqual([false, true]);
+    expect((await store.repos.backups.lastSuccess())!.file).toBe('/b/a.sql.gz');
+  });
+});

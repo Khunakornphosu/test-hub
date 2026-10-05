@@ -10,6 +10,8 @@
   "scripts": {
     "db:up": "docker compose up -d db",
     "db:migrate": "npm run migrate -w @test-studio/db",
+    "db:backup": "npm run backup -w @test-studio/runner",
+    "db:restore": "scripts/db-restore.sh",
     "build": "npm run build -w @test-studio/core && npm run build -w @test-studio/db && npm run build -w @test-studio/runner",
     "build:core": "npm run build -w @test-studio/core",
     "build:web": "npm run build -w @test-studio/web",

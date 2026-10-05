@@ -41,6 +41,19 @@ npm run import-poc -w @test-studio/db -- ../../poc-screencast/data
 
 **รันเว็บและ runner สำหรับ Step 3:** ดู [apps/web/README.md](apps/web/README.md) และ [docs/step3-handoff.md](docs/step3-handoff.md) (พอร์ตเว็บ 4700, runner 4800; ห้ามใช้ 3100)
 
+## สำรองและกู้คืนข้อมูล
+
+runner สำรองฐานข้อมูลวันละครั้งหลังตี 3 (เวลาไทย) เป็นไฟล์ `backups/test-studio-<วันที่>_<เวลา>.sql.gz` และเก็บไว้ 14 วัน ดูสถานะได้ที่หน้าตั้งค่า
+
+```bash
+npm run db:backup                                   # สำรองทันที
+npm run db:restore -- backups/<ไฟล์>.sql.gz --yes    # กู้คืน (สำรองข้อมูลปัจจุบันให้ก่อนเสมอ)
+```
+
+- ไฟล์สำรองมีตัวแปรลับแบบเข้ารหัส ต้องใช้ `SECRET_KEY` เดิมจึงจะถอดรหัสได้ เก็บ key ไว้แยกจากไฟล์สำรอง
+- `pg_dump` ในเครื่องต้องเป็นรุ่นเดียวกับ Postgres server ถ้าไม่ใช่ ตั้ง `BACKUP_DOCKER_CONTAINER` ให้ใช้ `pg_dump` ในคอนเทนเนอร์
+- ตั้ง `BACKUP_DIR` เป็นโฟลเดอร์ที่ sync ขึ้น cloud เพื่อมีสำเนานอกเครื่อง
+
 ## ทดสอบ
 
 ```bash
