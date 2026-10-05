@@ -12,6 +12,7 @@ import ScriptEditor, { type ScriptRunResult } from './ScriptEditor';
 import TestCodeView from './TestCodeView';
 import { api, type TestSummary } from '@/lib/api';
 import { useRunner } from '@/lib/runner';
+import { useProject } from '@/lib/project';
 
 const labels: Record<Mode, string> = { interact: 'โต้ตอบ', pick: 'เลือก element', assertVisible: 'ตรวจการแสดงผล', assertText: 'ตรวจข้อความ', assertURL: 'ตรวจ URL' };
 const modes = (Object.keys(labels) as Mode[]).map((value) => ({ value, label: labels[value] }));
@@ -23,6 +24,7 @@ const stepDetail = (target: unknown, value: unknown) => {
 
 export default function Workspace() {
   const s = useStyles2(styles);
+  const { select: selectProject } = useProject();
   const [testId, setTestId] = useState<number | null>(null);
   const [testName, setTestName] = useState('');
   const [otherTests, setOtherTests] = useState<TestSummary[]>([]);
@@ -57,7 +59,7 @@ export default function Workspace() {
   }, []);
   useEffect(() => {
     if (!testId) return;
-    api.test(testId).then((t) => { setTestName(t.name); setNameDraft(t.name); return api.tests(t.projectId); }).then(setOtherTests).catch((e) => setMessage((e as Error).message));
+    api.test(testId).then((t) => { setTestName(t.name); setNameDraft(t.name); selectProject(t.projectId); return api.tests(t.projectId); }).then(setOtherTests).catch((e) => setMessage((e as Error).message));
   }, [testId]);
   const onMessage = useCallback((msg: ServerMessage) => {
     if (msg.type === 'stepAdded') {

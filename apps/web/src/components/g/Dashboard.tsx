@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Alert, Badge, Button, Select, useTheme2 } from '@grafana/ui';
+import { Alert, Badge, Button, RadioButtonGroup, Select, useTheme2 } from '@grafana/ui';
 import { useProject } from '@/lib/project';
 
 type Overview = { totals: { runs: number; passed: number; failed: number; avgMs: number; healedSteps: number; pendingHeals: number }; bucketMs: number; series: { t: number; passed: number; failed: number; avgMs: number }[]; slowest: { testId: number; name: string; avgMs: number }[]; timeline: { testId: number; name: string; states: ('p'|'f'|'h')[] }[]; failures: { runId: number; testId: number; testName: string; at: string; stepNumber: number | null; message: string }[] };
@@ -12,13 +12,15 @@ export default function Dashboard() {
   const passColor = theme.visualization.getColorByName('green');
   const failColor = theme.visualization.getColorByName('red');
   const healedColor = theme.visualization.getColorByName('orange');
-  const { projects } = useProject();
-  const [projectId, setProjectId] = useState('all');
+  const { current } = useProject();
+  const [scope, setScope] = useState<'current' | 'all'>('current');
+  const projectId = scope === 'all' ? 'all' : current ? String(current.id) : null;
   const [days, setDays] = useState('7');
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   useEffect(() => {
+    if (projectId == null) return;
     const to = Date.now(), from = to - Number(days) * 86400_000;
     const query = new URLSearchParams({ from: String(from), to: String(to) });
     if (projectId !== 'all') query.set('projectId', projectId);
@@ -36,7 +38,7 @@ export default function Dashboard() {
   }
   const chartMax = Math.max(1, ...chartSlots.map((point) => point.passed + point.failed));
   return <div style={{ padding: 24, display: 'grid', gap: 18, maxWidth: 1480, margin: '0 auto' }}>
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}><h1>ภาพรวมการทดสอบ</h1><div style={{ display: 'flex', gap: 8 }}><Select aria-label="โปรเจกต์" width={22} options={[{ label: 'ทุกโปรเจกต์', value: 'all' }, ...projects.map((p) => ({ label: p.name, value: String(p.id) }))]} value={projectId} onChange={(v) => setProjectId(v.value ?? 'all')} /><Select aria-label="ช่วงเวลา" width={16} options={[{ label: '24 ชั่วโมง', value: '1' }, { label: '7 วัน', value: '7' }, { label: '30 วัน', value: '30' }]} value={days} onChange={(v) => setDays(v.value ?? '7')} /><Button icon="sync" onClick={() => setDays((v) => v)}>รีเฟรช</Button></div></div>
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}><h1>ภาพรวมการทดสอบ</h1><div style={{ display: 'flex', gap: 8 }}><RadioButtonGroup aria-label="ขอบเขต" options={[{ label: 'โปรเจกต์นี้', value: 'current' }, { label: 'ทุกโปรเจกต์', value: 'all' }]} value={scope} onChange={(v) => setScope(v as 'current' | 'all')} /><Select aria-label="ช่วงเวลา" width={16} options={[{ label: '24 ชั่วโมง', value: '1' }, { label: '7 วัน', value: '7' }, { label: '30 วัน', value: '30' }]} value={days} onChange={(v) => setDays(v.value ?? '7')} /><Button icon="sync" onClick={() => setDays((v) => v)}>รีเฟรช</Button></div></div>
     {error && <Alert severity="error" title={error} />}{loading && !data ? <span role="status">กำลังโหลดสถิติ…</span> : data && <>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 12 }}>{[['อัตราผ่าน', `${rate}%`], ['จำนวนการรัน', total!.runs], ['เวลาเฉลี่ย', `${(total!.avgMs / 1000).toFixed(2)} วินาที`], ['ซ่อม locator', total!.healedSteps], ['รอยืนยัน', total!.pendingHeals]].map(([label, value]) => <div key={String(label)} style={panelStyle}><small style={mutedText}>{label}</small><h2 style={{ margin: '8px 0 0' }}>{value}</h2></div>)}</div>
       <section style={panelStyle}><h2>การรันตามช่วงเวลา</h2>{total!.runs ? <><div aria-label="กราฟจำนวนการรัน" style={{ display: 'flex', height: 160, alignItems: 'end', gap: 3, margin: '16px 0 10px' }}>{chartSlots.map((point, i) => { const count = point.passed + point.failed; const height = count ? Math.max(4, count / chartMax * 140) : 0; return <div key={i} title={`${new Date(point.t).toLocaleString('th-TH')} ผ่าน ${point.passed} ไม่ผ่าน ${point.failed}`} style={{ flex: 1, minWidth: 0, height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'end' }}>{count > 0 && <div style={{ height, display: 'flex', flexDirection: 'column', justifyContent: 'end', overflow: 'hidden', borderRadius: '3px 3px 0 0' }}>{point.passed > 0 && <div style={{ height: `${point.passed / count * 100}%`, minHeight: point.failed ? 1 : 0, background: passColor }} />}{point.failed > 0 && <div style={{ height: `${point.failed / count * 100}%`, minHeight: point.passed ? 1 : 0, background: failColor }} />}</div>}</div>; })}</div><div style={{ display: 'flex', justifyContent: 'space-between', ...mutedText, fontSize: 12, marginBottom: 8 }}><span>{new Date(chartStart).toLocaleDateString('th-TH')}</span><span>วันนี้</span></div><small style={mutedText}>สีเขียว = ผ่าน · สีแดง = ไม่ผ่าน</small></> : <p style={{ ...mutedText, padding: '28px 0' }}>ยังไม่มีการรันในช่วงเวลานี้ ลองขยายช่วงเวลาหรือเริ่มรันเทสเคส</p>}</section>

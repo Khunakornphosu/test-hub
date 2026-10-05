@@ -74,10 +74,12 @@ export function runsRepo(db: Db) {
       return filtered.orderBy(desc(runs.startedAt), desc(runs.id)).limit(Math.min(options.limit ?? 50, 200));
     },
     /** ผลการรันแบบแบ่งหน้า (ใหม่สุดก่อน) พร้อมจำนวนทั้งหมด */
-    async listPage(options: { projectId?: number; batchId?: number; limit: number; offset: number }): Promise<{ items: RecentRun[]; total: number }> {
+    async listPage(options: { projectId?: number; testId?: number; batchId?: number; passed?: boolean; limit: number; offset: number }): Promise<{ items: RecentRun[]; total: number }> {
       const conditions = [
         options.projectId != null ? eq(tests.projectId, options.projectId) : undefined,
+        options.testId != null ? eq(runs.testId, options.testId) : undefined,
         options.batchId != null ? eq(runs.batchId, options.batchId) : undefined,
+        options.passed != null ? eq(runs.passed, options.passed) : undefined,
       ].filter((c) => c !== undefined);
       const where = conditions.length ? and(...conditions) : undefined;
       const limit = Math.min(Math.max(options.limit, 1), 100);

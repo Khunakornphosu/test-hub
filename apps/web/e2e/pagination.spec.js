@@ -54,18 +54,18 @@ test('ผลการรันแบ่งหน้าจาก server', async (
   }
   await page.goto('/runs');
   const pager = page.getByRole('navigation', { name: 'เปลี่ยนหน้า' });
-  await expect(pager).toContainText(/แสดง 1–20 จาก [\d,]+ ครั้ง/);
+  await expect(pager).toContainText('แสดง 1–20 จาก 45 ครั้ง');
   const body = page.locator('tbody tr');
   await expect(body).toHaveCount(20);
   await expect(body.first()).toContainText('มีประวัติเยอะ');
 
   await pager.getByRole('button', { name: 'หน้า 2', exact: true }).click();
-  await expect(pager).toContainText(/แสดง 21–40 จาก/);
+  await expect(pager).toContainText('แสดง 21–40 จาก 45 ครั้ง');
   await expect(body.first()).toContainText('มีประวัติเยอะ');
   await pager.getByLabel('จำนวนต่อหน้า').click();
   await page.getByRole('option', { name: '50', exact: true }).click();
-  await expect(pager).toContainText(/แสดง 1–50 จาก/);
-  await expect(body).toHaveCount(50);
+  await expect(pager).toContainText('แสดง 1–45 จาก 45 ครั้ง');
+  await expect(body).toHaveCount(45);
 });
 
 test('รายการ secret แบ่งหน้าเมื่อเกิน 10 รายการ', async ({ page, request }) => {

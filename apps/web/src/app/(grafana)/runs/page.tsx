@@ -1,15 +1,38 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import type { GrafanaTheme2 } from '@grafana/data';
-import { Alert, Badge, Button, useStyles2 } from '@grafana/ui';
+import { Alert, Badge, Button, RadioButtonGroup, Select, useStyles2 } from '@grafana/ui';
+import { useQuery } from '@tanstack/react-query';
 import TablePager from '@/components/g/TablePager';
+import { api } from '@/lib/api';
+import { useProject } from '@/lib/project';
 
 type Recent = { id: number; testId: number; testName: string; projectId: number; startedAt: string; durationMs: number; passed: boolean; hasScreenshot: boolean };
 type Detail = Recent & { results: { status: string; action?: string; label?: string; error?: string; durationMs?: number; healed?: unknown[] }[] };
+type Status = 'all' | 'passed' | 'failed';
+type Scope = 'current' | 'all';
+/** scope current = โปรเจกต์ที่เลือกใน sidebar, all = ทุกโปรเจกต์ */
+interface Filters { scope: Scope; test: number | null; status: Status }
+
+const STATUS_OPTIONS: { label: string; value: Status }[] = [{ label: 'ทั้งหมด', value: 'all' }, { label: 'ผ่าน', value: 'passed' }, { label: 'ไม่ผ่าน', value: 'failed' }];
+const SCOPE_OPTIONS: { label: string; value: Scope }[] = [{ label: 'โปรเจกต์นี้', value: 'current' }, { label: 'ทุกโปรเจกต์', value: 'all' }];
+
+function readFilters(): Filters {
+  const q = new URLSearchParams(location.search);
+  const status = q.get('status');
+  return {
+    scope: q.get('project') === 'all' ? 'all' : 'current',
+    test: Number(q.get('test')) || null,
+    status: status === 'passed' || status === 'failed' ? status : 'all',
+  };
+}
 
 export default function Page() {
   const s = useStyles2(styles);
+  const { projects, current } = useProject();
+  const [filters, setFilters] = useState<Filters>({ scope: 'current', test: null, status: 'all' });
+  const [ready, setReady] = useState(false);
   const [runs, setRuns] = useState<Recent[]>([]);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState('');
@@ -17,13 +40,50 @@ export default function Page() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
-  const load = useCallback((p = page, size = pageSize) => {
+
+  useEffect(() => { setFilters(readFilters()); setReady(true); }, []);
+  const allProjects = filters.scope === 'all';
+  const projectId = allProjects ? null : current?.id ?? null;
+  // สลับโปรเจกต์จาก sidebar: ตัวกรองเทสเป็นของโปรเจกต์เดิม จึงล้างทิ้ง
+  const lastProject = useRef<number | null>(null);
+  useEffect(() => {
+    const id = current?.id ?? null;
+    if (lastProject.current != null && id !== lastProject.current && filters.test != null) update({ test: null });
+    lastProject.current = id;
+  }, [current?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tests = useQuery({ queryKey: ['tests', projectId], queryFn: () => api.tests(projectId!), enabled: projectId != null });
+  const projectNames = useMemo(() => new Map(projects.map((p) => [p.id, p.name])), [projects]);
+  const waitingForProject = !allProjects && !current;
+
+  const update = (patch: Partial<Filters>) => {
+    const next = { ...filters, ...patch };
+    setFilters(next);
+    setPage(1);
+    const q = new URLSearchParams(location.search);
+    q.delete('run');
+    for (const [key, value] of [['project', next.scope === 'all' ? 'all' : null], ['test', next.test], ['status', next.status === 'all' ? null : next.status]] as const) {
+      if (value == null) q.delete(key);
+      else q.set(key, String(value));
+    }
+    history.replaceState(null, '', `${location.pathname}${q.size ? `?${q}` : ''}`);
+  };
+
+  const load = useCallback(() => {
+    if (!ready || waitingForProject) return;
+    const q = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (projectId != null) q.set('projectId', String(projectId));
+    if (filters.test != null) q.set('testId', String(filters.test));
+    if (filters.status !== 'all') q.set('status', filters.status);
     setLoading(true);
-    fetch(`/api/runs?page=${p}&pageSize=${size}`).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); setRuns(d.items); setTotal(d.total); }).catch((e) => setError(e.message)).finally(() => setLoading(false));
-  }, [page, pageSize]);
+    fetch(`/api/runs?${q}`).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); setRuns(d.items); setTotal(d.total); }).catch((e) => setError(e.message)).finally(() => setLoading(false));
+  }, [ready, waitingForProject, page, pageSize, projectId, filters.test, filters.status]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { const run = Number(new URLSearchParams(location.search).get('run')); if (run) void openRun(run); }, []);
   const openRun = async (id: number) => { try { const r = await fetch(`/api/runs/${id}`); const d = await r.json(); if (!r.ok) throw new Error(d.error); setDetail(d); } catch (e) { setError((e as Error).message); } };
+
+  const filtered = filters.test != null || filters.status !== 'all';
+  const columns = ['สถานะ', ...(allProjects ? ['โปรเจกต์'] : []), 'เทส', 'เวลาเริ่ม', 'ระยะเวลา', 'ภาพหน้าจอ', ''];
+
   return <div className={s.page}>
     <div className={s.head}><h1>ผลการรัน</h1><Button icon="sync" onClick={() => load()}>โหลดใหม่</Button></div>
     {error && <Alert severity="error" title={error} onRemove={() => setError('')} />}
@@ -31,14 +91,33 @@ export default function Page() {
       <h3>ผลแต่ละขั้นตอน</h3><ol>{detail.results.map((step, i) => <li key={i} style={{ padding: 8, borderBottom: '1px solid var(--border-weak)' }}><Badge color={step.status === 'passed' ? 'green' : step.status === 'failed' ? 'red' : 'blue'} text={step.status === 'passed' ? 'ผ่าน' : step.status === 'failed' ? 'ไม่ผ่าน' : step.status} /> <b>{step.label ?? step.action ?? `ขั้นตอน ${i + 1}`}</b> {step.durationMs != null && <small>{step.durationMs} ms</small>}{step.error && <p style={{ color: 'var(--error-text)' }}>{step.error}</p>}{step.healed?.length ? <p>locator ซ่อมอัตโนมัติ: {step.healed.length}</p> : null}</li>)}</ol>
       {detail.hasScreenshot && <><h3>ภาพหน้าจอเมื่อจบการรัน</h3><img src={`/api/runs/${detail.id}/screenshot`} alt="ภาพหน้าจอผลการรัน" style={{ maxWidth: '100%', border: '1px solid var(--border-weak)' }} /></>}
     </section>}
-    <section className={s.section}><h2>รายการล่าสุด</h2>{loading && !runs.length ? <span role="status">กำลังโหลดผลการรัน…</span> : runs.length ? <> <div className={s.tableWrap}><table className={s.table}><thead><tr>{['สถานะ', 'เทส', 'เวลาเริ่ม', 'ระยะเวลา', 'ภาพหน้าจอ', ''].map((x) => <th key={x}>{x}</th>)}</tr></thead><tbody>{runs.map((r) => <tr key={r.id}><td><Badge color={r.passed ? 'green' : 'red'} text={r.passed ? 'ผ่าน' : 'ไม่ผ่าน'} /></td><td>{r.testName}</td><td>{new Date(r.startedAt).toLocaleString('th-TH')}</td><td>{(r.durationMs / 1000).toFixed(2)} วินาที</td><td>{r.hasScreenshot ? 'มี' : 'ไม่มี'}</td><td><Button size="sm" variant="secondary" onClick={() => void openRun(r.id)}>ดูรายละเอียด</Button></td></tr>)}</tbody></table></div><TablePager page={page} pageSize={pageSize} total={total} label="ครั้ง" onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} /></> : <p>ยังไม่มีผลการรัน</p>}</section>
+    <section className={s.section}>
+      <div className={s.filters} role="search" aria-label="ตัวกรองผลการรัน">
+        <RadioButtonGroup<Scope> aria-label="ขอบเขต" options={SCOPE_OPTIONS} value={filters.scope} onChange={(scope) => update({ scope, test: null })} />
+        <Select aria-label="เทส" width={30} isClearable disabled={allProjects} placeholder={allProjects ? 'ทุกเทส (ทุกโปรเจกต์)' : 'ทุกเทส'} options={(tests.data ?? []).map((t) => ({ label: t.name, value: t.id }))} value={filters.test ?? null} onChange={(v) => update({ test: (v?.value as number | undefined) ?? null })} />
+        <RadioButtonGroup<Status> aria-label="สถานะ" options={STATUS_OPTIONS} value={filters.status} onChange={(status) => update({ status })} />
+        {filtered && <Button variant="secondary" fill="text" icon="times" onClick={() => update({ test: null, status: 'all' })}>ล้างตัวกรอง</Button>}
+      </div>
+      {loading && !runs.length ? <span role="status">กำลังโหลดผลการรัน…</span> : runs.length ? <>
+        <div className={s.tableWrap}><table className={s.table}><thead><tr>{columns.map((x, i) => <th key={i}>{x}</th>)}</tr></thead><tbody>{runs.map((r) => <tr key={r.id}>
+          <td><Badge color={r.passed ? 'green' : 'red'} text={r.passed ? 'ผ่าน' : 'ไม่ผ่าน'} /></td>
+          {allProjects && <td className={s.muted}>{projectNames.get(r.projectId) ?? `#${r.projectId}`}</td>}
+          <td>{r.testName}</td><td>{new Date(r.startedAt).toLocaleString('th-TH')}</td><td>{(r.durationMs / 1000).toFixed(2)} วินาที</td><td>{r.hasScreenshot ? 'มี' : 'ไม่มี'}</td>
+          <td><Button size="sm" variant="secondary" onClick={() => void openRun(r.id)}>ดูรายละเอียด</Button></td>
+        </tr>)}</tbody></table></div>
+        <TablePager page={page} pageSize={pageSize} total={total} label="ครั้ง" onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} />
+      </> : <div className={s.empty}><p>{filtered ? 'ไม่พบผลการรันตามตัวกรองนี้' : 'ยังไม่มีผลการรัน'}</p>{filtered && <Button variant="secondary" onClick={() => update({ test: null, status: 'all' })}>ล้างตัวกรอง</Button>}</div>}
+    </section>
   </div>;
 }
 
 const styles = (t: GrafanaTheme2) => ({
   page: css({ boxSizing: 'border-box', width: '100%', padding: t.spacing(3), display: 'grid', gap: t.spacing(2), maxWidth: 1480, margin: '0 auto', '@media (max-width: 760px)': { padding: t.spacing(2) } }),
   head: css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', h1: { margin: 0 } }),
-  section: css({ h2: { marginTop: 0 } }),
+  section: css({ display: 'grid', gap: t.spacing(1.5) }),
+  filters: css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: t.spacing(1) }),
+  muted: css({ color: t.colors.text.secondary }),
+  empty: css({ padding: t.spacing(4), textAlign: 'center', color: t.colors.text.secondary, border: `1px dashed ${t.colors.border.medium}`, borderRadius: t.shape.radius.default, p: { margin: `0 0 ${t.spacing(1.5)}` } }),
   detail: css({ padding: t.spacing(2), border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default, background: t.colors.background.primary, h3: { marginTop: t.spacing(2.5) } }),
   detailHead: css({ display: 'flex', justifyContent: 'space-between', gap: t.spacing(2), alignItems: 'flex-start', flexWrap: 'wrap', h2: { marginTop: 0 } }),
   tableWrap: css({ overflowX: 'auto', border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default }),

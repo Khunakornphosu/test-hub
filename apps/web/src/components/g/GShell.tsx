@@ -6,6 +6,8 @@ import type { GrafanaTheme2 } from '@grafana/data';
 import { Icon, IconButton, Input, useStyles2, type IconName } from '@grafana/ui';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useGMode } from './GProviders';
+import ProjectSwitcher from './ProjectSwitcher';
+import { ProjectProvider } from '@/lib/project';
 
 const NAV: { href: string; label: string; icon: IconName; section?: string }[] = [
   { href: '/', label: 'ภาพรวม', icon: 'apps' },
@@ -55,6 +57,7 @@ export default function GShell({ children }: { children: ReactNode }) {
   };
   const active = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
   return (
+    <ProjectProvider>
     <div className={s.root} style={{ gridTemplateColumns: `${collapsed ? 56 : 220}px minmax(0, 1fr)` }}>
       <header className={s.top}>
         <Link href="/" className={s.logo} style={{ width: collapsed ? 56 : 220 }} aria-label="Test Studio">
@@ -80,6 +83,7 @@ export default function GShell({ children }: { children: ReactNode }) {
         </div>
       </header>
       <aside className={s.menu} aria-label="เมนูหลัก">
+        <ProjectSwitcher collapsed={collapsed} />
         {NAV.map((n, i) => (
           <div key={n.href}>
             {n.section && NAV[i - 1]?.section !== n.section && (collapsed ? <div className={s.divider} /> : <div className={s.section}>{n.section}</div>)}
@@ -97,6 +101,7 @@ export default function GShell({ children }: { children: ReactNode }) {
       </aside>
       <main className={s.main}>{children}</main>
     </div>
+    </ProjectProvider>
   );
 }
 
