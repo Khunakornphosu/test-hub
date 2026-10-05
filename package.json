@@ -21,7 +21,10 @@
     "test:runner": "npm test -w @test-studio/runner",
     "test": "npm run build && npm run test:core && npm run test:db && npm run test:runner",
     "test:poc": "cd poc-screencast && npm test",
-    "test:poc-on-runner": "cd poc-screencast && POC_BACKEND=runner npm test"
+    "test:poc-on-runner": "cd poc-screencast && POC_BACKEND=runner npm test",
+    "share": "scripts/share.sh start",
+    "share:stop": "scripts/share.sh stop",
+    "share:status": "scripts/share.sh status"
   },
   "devDependencies": {
     "typescript": "^5.9.0"

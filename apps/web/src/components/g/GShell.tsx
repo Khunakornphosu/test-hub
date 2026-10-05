@@ -44,6 +44,15 @@ export default function GShell({ children }: { children: ReactNode }) {
     try { localStorage.setItem('ts-menu', c ? 'open' : 'collapsed'); } catch {}
     return !c;
   });
+  // ปุ่มออกจากระบบมีเฉพาะตอนเปิดใช้รหัสผ่านทีม (ACCESS_PASSWORD)
+  const [accessRequired, setAccessRequired] = useState(false);
+  useEffect(() => {
+    fetch('/api/login').then((r) => r.json()).then((d: { required?: boolean }) => setAccessRequired(!!d.required)).catch(() => {});
+  }, []);
+  const logout = async () => {
+    await fetch('/api/logout', { method: 'POST' }).catch(() => {});
+    location.href = '/login';
+  };
   const active = (href: string) => (href === '/' ? path === '/' : path.startsWith(href));
   return (
     <div className={s.root} style={{ gridTemplateColumns: `${collapsed ? 56 : 220}px minmax(0, 1fr)` }}>
@@ -66,6 +75,7 @@ export default function GShell({ children }: { children: ReactNode }) {
           <IconButton name="question-circle" tooltip="ช่วยเหลือ" aria-label="ช่วยเหลือ" />
           <IconButton name="bell" tooltip="การแจ้งเตือน" aria-label="การแจ้งเตือน" />
           <IconButton name="adjust-circle" tooltip={mode === 'dark' ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด'} onClick={toggle} />
+          {accessRequired && <IconButton name="signout" tooltip="ออกจากระบบ" onClick={logout} />}
           <span className={s.avatar} aria-label="ผู้ใช้">ส</span>
         </div>
       </header>
