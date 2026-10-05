@@ -81,6 +81,10 @@ export function describeParts(step: Step, ctx: DescribeContext = {}): StepParts 
       parts.verb = 'พิมพ์';
       parts.value = step.secret ? `•••••• (${step.secret})` : `"${step.value ?? ''}"`;
       break;
+    case 'fillForm':
+      parts.verb = 'กรอกฟอร์ม';
+      parts.value = `${step.fields.length} ช่อง`;
+      break;
     case 'press':
       parts.verb = 'กด';
       parts.value = step.key;

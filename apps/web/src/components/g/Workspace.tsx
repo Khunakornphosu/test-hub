@@ -32,6 +32,7 @@ export default function Workspace() {
   const [selectMenu, setSelectMenu] = useState<SelectMenu | null>(null);
   const [picked, setPicked] = useState<Locator | null>(null);
   const pickStepId = useRef<number | null>(null);
+  const pickFormFieldIndex = useRef<number | null>(null);
   const [locatorResult, setLocatorResult] = useState('');
   const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
   const [secretValue, setSecretValue] = useState('');
@@ -88,6 +89,22 @@ export default function Workspace() {
   };
   useEffect(() => {
     if (!picked) return;
+    const fieldIndex = pickFormFieldIndex.current;
+    if (fieldIndex != null) {
+      pickFormFieldIndex.current = null;
+      const step = editor?.steps.find((item) => item.id === pickStepId.current);
+      pickStepId.current = null;
+      if (!step || step.action !== 'fillForm' || !step.fields[fieldIndex]) {
+        setMessage('เลือก element แล้ว แต่ไม่พบช่องฟอร์มที่กำลังแก้');
+        setPicked(null);
+        return;
+      }
+      const fields = step.fields.map((field, index) => index === fieldIndex ? { ...field, locator: picked } : field);
+      runner.send({ type: 'updateStep', id: step.id!, step: { ...step, fields } });
+      setMessage(`กำหนด ${locatorLabel(picked)} ให้ช่องฟอร์มแล้ว`);
+      setPicked(null);
+      return;
+    }
     const id = pickStepId.current;
     pickStepId.current = null;
     const step = id == null ? undefined : editor?.steps.find((item) => item.id === id);
@@ -102,14 +119,15 @@ export default function Workspace() {
   }, [picked, editor, runner.send]);
   const setModeAndSend = (next: Mode | undefined) => { const m = next ?? 'interact'; setMode(m); runner.send({ type: 'mode', mode: m }); };
   const onAdd = (action: ActionName) => runner.send({ type: 'insertStep', action });
-  const doPick = () => { pickStepId.current = selected?.id ?? null; setPicked(null); setModeAndSend('pick'); };
+  const doPick = () => { pickFormFieldIndex.current = null; pickStepId.current = selected?.id ?? null; setPicked(null); setModeAndSend('pick'); };
+  const doPickFormField = (index: number) => { pickStepId.current = selected?.id ?? null; pickFormFieldIndex.current = index; setPicked(null); setModeAndSend('pick'); };
   const steps = editor?.steps ?? [];
   const health = selected ? editor?.health[selected.id!] : undefined;
   const runDone = runner.run.done;
   const runStep = runDone ? runner.run.steps : null;
   const connectLabel = runner.conn === 'connected' ? 'เชื่อมต่อแล้ว' : runner.conn === 'reconnecting' ? 'กำลังเชื่อมต่อใหม่' : 'กำลังเชื่อมต่อ';
   const actions = runner.ready?.actions;
-  const fields = useMemo(() => selected ? Object.entries(actions?.[selected.action]?.fields ?? {}) : [], [selected, actions]);
+  const fields = useMemo(() => selected && selected.action !== 'useTest' ? Object.entries(actions?.[selected.action]?.fields ?? {}) : [], [selected, actions]);
 
   return <div className={s.page}>
     <header className={s.toolbar}>
@@ -143,9 +161,19 @@ export default function Workspace() {
           <Field label="การกระทำ"><Select options={Object.entries(actions ?? {}).map(([value, spec]) => ({ value, label: spec.label }))} value={selected.action} onChange={(v) => v.value && update({ action: v.value })} /></Field>
           {('locator' in selected) && <Field label="ตัวระบุ element"><div data-testid="step-locator" className={s.locator}>{locatorLabel(selected.locator ?? null)}<Button size="sm" variant="secondary" icon="search-plus" onClick={doPick}>เลือกจากหน้าเว็บ</Button><Button size="sm" variant="secondary" onClick={() => selected.locator && runner.send({ type: 'testLocator', locator: selected.locator })}>ทดสอบ</Button>{locatorResult && <small>{locatorResult}</small>}</div></Field>}
           {fields.map(([key, label]) => <Field key={key} label={label} description={actions?.[selected.action]?.hints?.[key]}><Input value={String((selected as unknown as Record<string, unknown>)[key] ?? '')} onChange={(e) => update({ [key]: e.currentTarget.value })} /></Field>)}
+          {selected.action === 'fillForm' && <Field label="ช่องที่ต้องการกรอก" description="กดเลือกจากหน้าเว็บเพื่อระบุช่อง แล้วกำหนดค่าที่ต้องการ ระบบจะกรอกทุกแถวใน step เดียว">
+            <div style={{ display: 'grid', gap: 8 }}>
+              {selected.fields.map((field, index) => <div key={index} className={s.formField}>
+                <div className={s.formFieldHead}><span className={s.formFieldTarget}>{field.locator ? locatorLabel(field.locator) : field.label ? locatorLabel({ type: 'label', value: field.label }) : 'ยังไม่ได้เลือก element'}</span><Button size="sm" variant="secondary" icon="search-plus" onClick={() => doPickFormField(index)}>เลือกช่องจากหน้าเว็บ</Button></div>
+                <div className={s.formFieldValue}><Input aria-label={`ค่าช่อง ${index + 1}`} placeholder="ค่าที่จะกรอก" value={field.value} onChange={(e) => update({ fields: selected.fields.map((item, i) => i === index ? { ...item, value: e.currentTarget.value } : item) })} />
+                <IconButton name="trash-alt" tooltip="ลบช่องนี้" aria-label={`ลบช่อง ${index + 1}`} onClick={() => update({ fields: selected.fields.filter((_, i) => i !== index) })} /></div>
+              </div>)}
+              <Button size="sm" variant="secondary" icon="plus" onClick={() => update({ fields: [...selected.fields, { label: '', value: '' }] })}>เพิ่มช่อง</Button>
+            </div>
+          </Field>}
           {selected.action === 'fill' && <><Field label="ชื่อตัวแปรลับ (ถ้าต้องการ)"><Input value={String(('secret' in selected && selected.secret) || '')} placeholder="เช่น TEST_EMAIL" onChange={(e) => update({ secret: e.currentTarget.value.toUpperCase() })} /></Field>{'secret' in selected && selected.secret && <Field label={`ค่าใหม่ของ ${selected.secret}`} description="ค่าจะถูกบันทึกเป็น secret และไม่แสดงซ้ำ"><Input type="password" value={secretValue} onChange={(e) => setSecretValue(e.currentTarget.value)} /></Field>}</>}
           {selected.action === 'selectOption' && <><Button size="sm" variant="secondary" onClick={() => 'locator' in selected && selected.locator && runner.send({ type: 'selectOptions', locator: selected.locator })}>โหลดตัวเลือกจากหน้าเว็บ ({options.length})</Button>{options.length > 0 && <Field label="ตัวเลือก"><Select options={options.map((o) => ({ label: o.label || o.value, value: o.value }))} value={selected.value} onChange={(v) => update({ value: v.value, label: v.label })} /></Field>}</>}
-          {selected.action === 'useTest' && <Field label="เทสที่ใช้ซ้ำ"><Select options={otherTests.filter((t) => t.id !== testId).map((t) => ({ label: t.name, value: t.id }))} value={selected.testId ?? undefined} placeholder="เลือกเทส" onChange={(v) => update({ testId: v.value ?? null })} /></Field>}
+          {selected.action === 'useTest' && <Field label="เทสที่ใช้ซ้ำ" description={actions?.useTest?.hints?.testId}><Select options={otherTests.filter((t) => t.id !== testId).map((t) => ({ label: t.name, value: t.id }))} value={selected.testId ?? undefined} placeholder="เลือกเทส" onChange={(v) => update({ testId: v.value ?? null })} /></Field>}
           {health && <div className={s.health}><b>สุขภาพ locator</b><div>ผ่าน {health.runs - health.failed} / {health.runs} · ซ่อม {health.healed} · ล้มเหลว {health.failed}</div></div>}
           {'fallbacks' in selected && selected.fallbacks?.length ? <Alert severity="warning" title="พบ locator ที่ระบบซ่อมให้อัตโนมัติ"><div>ระบบใช้ {locatorLabel(selected.fallbacks[0]!)} แทน locator เดิม</div><Button size="sm" variant="primary" onClick={() => testId && runner.send({ type: 'acceptHeal', testId, stepId: selected.id!, locator: selected.fallbacks![0]! })}>ยอมรับ locator ใหม่</Button></Alert> : null}
           <div className={s.footer}><Button variant="destructive" icon="trash-alt" onClick={() => runner.send({ type: 'deleteStep', id: selected.id! })}>ลบ step</Button><Button variant="primary" icon="save" onClick={() => setMessage('บันทึก step แล้ว')}>บันทึก step</Button></div>
@@ -162,15 +190,16 @@ function SortableStep({ step, index, active, health, run, onClick, onDelete }: {
   const s = useStyles2(styles);
   const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: step.id! });
   return <div ref={setNodeRef} data-testid="step-item" style={{ transform: CSS.Transform.toString(transform), transition }} className={`${s.step} ${active ? s.active : ''}`}>
-    <button className={s.drag} aria-label="ลากเพื่อเรียง step" {...attributes} {...listeners}><Icon name="draggabledots" /></button><button data-testid="step-main" aria-current={active ? 'step' : undefined} className={s.stepMain} onClick={onClick}><span className={s.num}>{index + 1}</span><b>{step.label}</b><small>{stepDetail(step.parts.target, step.parts.value)}</small>{health && <Badge color={health.failed > 0 ? 'orange' : 'green'} text={`${health.runs - health.failed}/${health.runs}`} />}{run?.status && <Badge color={run.status === 'passed' ? 'green' : run.status === 'failed' ? 'red' : 'blue'} text={run.status === 'passed' ? 'ผ่าน' : run.status === 'failed' ? 'ไม่ผ่าน' : 'กำลังรัน'} />}</button><button className={s.delete} aria-label={`ลบ step ${index + 1}`} onClick={onDelete}><Icon name="trash-alt" /></button>
+    <button className={s.drag} aria-label="ลากเพื่อเรียง step" {...attributes} {...listeners}><Icon name="draggabledots" /></button><button data-testid="step-main" aria-current={active ? 'step' : undefined} className={s.stepMain} onClick={onClick}><span className={s.num}>{index + 1}</span><b>{step.label}</b><span className={s.meta}><small>{stepDetail(step.parts.target, step.parts.value)}</small>{health && <Badge color={health.failed > 0 ? 'orange' : 'green'} text={`${health.runs - health.failed}/${health.runs}`} />}{run?.status && <Badge color={run.status === 'passed' ? 'green' : run.status === 'failed' ? 'red' : 'blue'} text={run.status === 'passed' ? 'ผ่าน' : run.status === 'failed' ? 'ไม่ผ่าน' : 'กำลังรัน'} />}</span></button><button className={s.delete} aria-label={`ลบ step ${index + 1}`} onClick={onDelete}><Icon name="trash-alt" /></button>
   </div>;
 }
 
 const styles = (t: GrafanaTheme2) => ({
   page: css({ height: '100%', display: 'grid', gridTemplateRows: 'auto auto auto auto minmax(0,1fr)', minHeight: 0 }), runBanner: css({ display: 'flex', alignItems: 'center', gap: 8 }),
-  toolbar: css({ display: 'flex', alignItems: 'center', gap: t.spacing(1), padding: t.spacing(1, 1.5), borderBottom: `1px solid ${t.colors.border.weak}`, flexWrap: 'wrap' }), titleInput: css({ width: 230 }), spacer: css({ flex: 1 }), modePicker: css({ minWidth: 0, '@media (max-width: 760px)': { display: 'none' } }), mobileModePicker: css({ display: 'none', '@media (max-width: 760px)': { display: 'block', flex: '1 0 100%', width: '100%' } }), notice: css({ margin: t.spacing(0.75, 1) }),
-  body: css({ gridRow: 5, display: 'grid', gridTemplateColumns: 'minmax(190px, 240px) minmax(0, 1fr) minmax(260px, 320px)', gap: t.spacing(1), padding: t.spacing(1), height: '100%', minHeight: 0, '@media (max-width: 1100px)': { gridTemplateColumns: 'minmax(180px, 230px) minmax(0, 1fr)', gridTemplateRows: 'minmax(420px, 1fr) auto', height: 'auto', overflowY: 'auto' }, '@media (max-width: 760px)': { gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateRows: 'minmax(360px, 55vh) auto auto', minHeight: 'calc(100vh - 116px)' } }),
+  toolbar: css({ display: 'flex', alignItems: 'center', gap: t.spacing(1), padding: t.spacing(1, 1.5), borderBottom: `1px solid ${t.colors.border.weak}`, flexWrap: 'wrap' }), titleInput: css({ flex: '0 1 230px', minWidth: 140 }), spacer: css({ flex: 1 }), modePicker: css({ minWidth: 0, '@media (max-width: 1360px)': { display: 'none' } }), mobileModePicker: css({ display: 'none', '@media (max-width: 1360px)': { display: 'block' }, '@media (max-width: 760px)': { flex: '1 0 100%', width: '100%' } }), notice: css({ margin: t.spacing(0.75, 1) }),
+  body: css({ gridRow: 5, display: 'grid', gridTemplateColumns: 'clamp(220px, 19vw, 300px) minmax(0, 1fr) clamp(280px, 22vw, 360px)', gap: t.spacing(1), padding: t.spacing(1), height: '100%', minHeight: 0, '@media (max-width: 1100px)': { gridTemplateColumns: 'minmax(180px, 230px) minmax(0, 1fr)', gridTemplateRows: 'minmax(420px, 1fr) auto', height: 'auto', overflowY: 'auto' }, '@media (max-width: 760px)': { gridTemplateColumns: 'minmax(0, 1fr)', gridTemplateRows: 'minmax(360px, 55vh) auto auto', minHeight: 'calc(100vh - 116px)' } }),
   left: css({ minHeight: 0, display: 'flex', flexDirection: 'column', border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default, background: t.colors.background.primary, '@media (max-width: 760px)': { gridRow: 2, maxHeight: 300 } }), panelTitle: css({ display: 'flex', alignItems: 'center', gap: 8, padding: t.spacing(1.5), fontWeight: 600, borderBottom: `1px solid ${t.colors.border.weak}` }), steps: css({ overflow: 'auto', padding: t.spacing(1), display: 'flex', flexDirection: 'column', gap: 5 }),
-  step: css({ display: 'grid', gridTemplateColumns: '24px 1fr 24px', border: `1px solid ${t.colors.border.weak}`, borderRadius: 4, background: t.colors.background.primary, '&:hover': { borderColor: t.colors.primary.border } }), active: css({ borderColor: t.colors.primary.border, background: t.colors.action.selected }), drag: css({ border: 0, background: 'transparent', color: t.colors.text.secondary, cursor: 'grab' }), stepMain: css({ textAlign: 'left', border: 0, background: 'transparent', color: t.colors.text.primary, display: 'grid', gridTemplateColumns: '20px 1fr', gap: 4, padding: 7, cursor: 'pointer', small: { gridColumn: '2', color: t.colors.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis' } }), num: css({ color: t.colors.text.secondary }), delete: css({ border: 0, background: 'transparent', color: t.colors.text.secondary, cursor: 'pointer' }), addRow: css({ paddingTop: 6 }),
+  step: css({ display: 'grid', gridTemplateColumns: '24px 1fr 24px', border: `1px solid ${t.colors.border.weak}`, borderRadius: 4, background: t.colors.background.primary, '&:hover': { borderColor: t.colors.primary.border } }), active: css({ borderColor: t.colors.primary.border, background: t.colors.action.selected }), drag: css({ border: 0, background: 'transparent', color: t.colors.text.secondary, cursor: 'grab' }), stepMain: css({ textAlign: 'left', border: 0, background: 'transparent', color: t.colors.text.primary, display: 'grid', gridTemplateColumns: '20px 1fr', gap: 4, padding: 7, cursor: 'pointer', b: { overflowWrap: 'anywhere' } }), meta: css({ gridColumn: '2', display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, small: { flex: 1, minWidth: 0, color: t.colors.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }),
+  formField: css({ display: 'grid', gap: 6, padding: 8, borderRadius: 4, background: t.colors.background.secondary }), formFieldHead: css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }), formFieldTarget: css({ fontSize: 12, color: t.colors.text.secondary, overflowWrap: 'anywhere', minWidth: 0 }), formFieldValue: css({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 6, alignItems: 'center' }), num: css({ color: t.colors.text.secondary }), delete: css({ border: 0, background: 'transparent', color: t.colors.text.secondary, cursor: 'pointer' }), addRow: css({ paddingTop: 6 }),
   center: css({ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: t.spacing(1), '@media (max-width: 760px)': { gridRow: 1 } }), urlbar: css({ display: 'flex', alignItems: 'center', gap: 5 }), urlInput: css({ flex: 1, minWidth: 0 }), browser: css({ flex: 1, minHeight: 0, overflow: 'auto', display: 'grid', alignContent: 'start', justifyContent: 'center', background: t.colors.background.secondary, border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default }), wait: css({ display: 'flex', gap: 10, alignItems: 'center', padding: 30, color: t.colors.text.secondary }), right: css({ minHeight: 0, overflow: 'auto', '@media (max-width: 1100px)': { gridColumn: '1 / -1', maxHeight: 420 }, '@media (max-width: 760px)': { gridColumn: 'auto', gridRow: 3, maxHeight: 'none' } }), editor: css({ padding: t.spacing(1.5), display: 'flex', flexDirection: 'column', gap: t.spacing(1) }), locator: css({ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 4, background: t.colors.background.secondary, overflowWrap: 'anywhere' }), health: css({ padding: 10, background: t.colors.background.secondary, borderRadius: 4, fontSize: 12 }), footer: css({ display: 'flex', justifyContent: 'space-between', gap: 8, paddingTop: 12 }), modal: css({ display: 'grid', gap: 12, minWidth: 500, maxWidth: 760 }),
 });

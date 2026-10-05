@@ -32,6 +32,8 @@ export function stepToCode(step: Step, ctx: CodegenContext = {}): string {
   if (!isComplete(step)) {
     return step.action === 'useTest'
       ? '// TODO: ใช้เทสอื่นซ้ำ — ยังไม่ได้เลือกเทส'
+      : step.action === 'fillForm'
+        ? '// TODO: กรอกฟอร์มหลายช่อง — กรุณาเลือก element ของทุกช่อง'
       : `// TODO: ${ACTIONS[step.action].label} — ยังไม่ได้เลือก element`;
   }
   const L = 'locator' in step && step.locator ? locatorToCode(step.locator) : null;
@@ -46,6 +48,11 @@ export function stepToCode(step: Step, ctx: CodegenContext = {}): string {
       return `await ${L}.uncheck();`;
     case 'fill':
       return `await ${L}.fill(${step.secret ? `process.env.${step.secret} ?? ''` : q(step.value ?? '')});`;
+    case 'fillForm':
+      return step.fields.map((field) => {
+        const locator = field.locator ?? (field.label?.trim() ? { type: 'label' as const, value: field.label.trim() } : null);
+        return locator ? `await ${locatorToCode(locator)}.fill(${q(field.value)});` : '// TODO: เลือก element ของช่องฟอร์ม';
+      }).join('\n');
     case 'press':
       return L ? `await ${L}.press(${q(step.key)});` : `await page.keyboard.press(${q(step.key)});`;
     case 'selectOption':
@@ -83,7 +90,7 @@ export function exportTest(
   const lines = (list: Step[], indent: string, stack: number[]): string[] =>
     list.flatMap((s) => {
       if (s.action === 'fill' && s.secret) secretNames.add(s.secret);
-      if (s.action !== 'useTest' || !s.testId) return [`${indent}${stepToCode(s)}`];
+      if (s.action !== 'useTest' || !s.testId) return stepToCode(s).split('\n').map((line) => `${indent}${line}`);
       const block = resolveTest(s.testId);
       if (!block) return [`${indent}// ใช้ซ้ำ: ไม่พบเทส #${s.testId} (อาจถูกลบไปแล้ว)`];
       if (stack.includes(block.id)) return [`${indent}// ใช้ซ้ำ: "${block.name}" วนกลับมาเรียกตัวเอง จึงข้ามไป`];

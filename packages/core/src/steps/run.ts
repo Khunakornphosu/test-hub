@@ -83,7 +83,7 @@ export interface RunStepOptions {
  */
 export async function runStep(page: Page, step: Step, { secrets = {}, checkUrl }: RunStepOptions = {}): Promise<{ healed?: Locator }> {
   if (!isComplete(step)) {
-    throw new Error(step.action === 'useTest' ? 'step นี้ยังไม่ได้เลือกเทส' : 'step นี้ยังไม่ได้เลือก element');
+    throw new Error(step.action === 'useTest' ? 'step นี้ยังไม่ได้เลือกเทส' : step.action === 'fillForm' ? 'กรุณาระบุ label ของทุกช่องในฟอร์ม' : 'step นี้ยังไม่ได้เลือก element');
   }
   const resolved = 'locator' in step && step.locator ? await resolveTarget(page, step) : null;
   const L = resolved?.L as PwLocator;
@@ -108,6 +108,14 @@ export async function runStep(page: Page, step: Step, { secrets = {}, checkUrl }
       await L.fill(secret ? secrets[secret]! : (step.value ?? ''), opts);
       break;
     }
+    case 'fillForm':
+      if (!step.fields.length) throw new Error('กรุณาเพิ่มช่องที่ต้องการกรอก');
+      for (const field of step.fields) {
+        const locator = field.locator ?? (field.label?.trim() ? { type: 'label' as const, value: field.label.trim() } : null);
+        if (!locator) throw new Error('กรุณาเลือก element ของทุกช่องในฟอร์ม');
+        await toLocator(page, locator).fill(field.value, opts);
+      }
+      break;
     case 'press':
       await (L ? L.press(step.key, opts) : page.keyboard.press(step.key));
       break;

@@ -57,6 +57,17 @@ export function sanitizeStep(input: unknown): Step {
 
   for (const field of Object.keys(spec.fields ?? {})) step[field] = String(raw[field] ?? '');
 
+  if (action === 'fillForm') {
+    const fields = Array.isArray(raw.fields) ? raw.fields.slice(0, 30) : [];
+    step.fields = fields.map((entry) => {
+      const field = isRecord(entry) ? entry : {};
+      let locator: Locator | null = null;
+      if (field.locator) locator = sanitizeLocator(field.locator);
+      else if (String(field.label ?? '').trim()) locator = { type: 'label', value: String(field.label).trim() };
+      return { locator, value: String(field.value ?? '') };
+    });
+  }
+
   if (action === 'fill' && raw.secret) {
     const name = String(raw.secret).trim().toUpperCase();
     if (!SECRET_NAME.test(name)) throw new Error('ชื่อตัวแปรลับใช้ได้เฉพาะ A-Z, 0-9 และ _');
@@ -74,11 +85,12 @@ export function sanitizeStep(input: unknown): Step {
 
 /** ค่าเริ่มต้นของ step ที่ผู้ใช้กด "+ เพิ่ม Step" */
 export function blankStep(action: ActionName): Step {
-  return sanitizeStep({ action, ...(action === 'press' && { key: 'Enter' }), ...(action === 'assertCount' && { expected: '1' }) });
+  return sanitizeStep({ action, ...(action === 'press' && { key: 'Enter' }), ...(action === 'assertCount' && { expected: '1' }), ...(action === 'fillForm' && { fields: [{ locator: null, value: '' }] }) });
 }
 
 export function isComplete(step: Step): boolean {
   if (step.action === 'useTest') return !!step.testId;
+  if (step.action === 'fillForm') return step.fields.length > 0 && step.fields.every((field) => !!field.locator || !!field.label?.trim());
   if (ACTIONS[step.action].locator !== 'required') return true;
   return 'locator' in step && !!step.locator;
 }

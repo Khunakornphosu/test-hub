@@ -79,6 +79,40 @@ describe('sanitizeStep', () => {
     expect(isComplete(blankStep('goto'))).toBe(true);
     expect(isComplete(sanitizeStep({ action: 'useTest', testId: 3 }))).toBe(true);
   });
+
+  it('fillForm: แปลง label เป็น locator, ตัดช่องเกิน 30 และ blankStep มีหนึ่งช่องว่าง', () => {
+    const step = sanitizeStep({
+      action: 'fillForm',
+      fields: [
+        { label: '  อีเมล  ', value: 'a@b.com' },
+        { locator: { type: 'css', value: '#pw' }, value: 123 },
+        { value: 'x' },
+        'junk',
+      ],
+    });
+    expect(step).toEqual({
+      action: 'fillForm',
+      fields: [
+        { locator: { type: 'label', value: 'อีเมล' }, value: 'a@b.com' },
+        { locator: { type: 'css', value: '#pw' }, value: '123' },
+        { locator: null, value: 'x' },
+        { locator: null, value: '' },
+      ],
+    });
+    expect(() => sanitizeStep({ action: 'fillForm', fields: [{ locator: { type: 'css', value: ' ' } }] })).toThrow('กรุณาระบุค่า locator');
+    const many = Array.from({ length: 40 }, (_, i) => ({ label: `f${i}`, value: '' }));
+    expect(sanitizeStep({ action: 'fillForm', fields: many })).toMatchObject({ fields: { length: 30 } });
+    expect(sanitizeStep({ action: 'fillForm' })).toEqual({ action: 'fillForm', fields: [] });
+    expect(blankStep('fillForm')).toEqual({ action: 'fillForm', fields: [{ locator: null, value: '' }] });
+  });
+
+  it('fillForm สมบูรณ์เมื่อมีอย่างน้อยหนึ่งช่องและทุกช่องมี locator หรือ label', () => {
+    expect(isComplete(blankStep('fillForm'))).toBe(false);
+    expect(isComplete({ action: 'fillForm', fields: [] })).toBe(false);
+    expect(isComplete({ action: 'fillForm', fields: [{ label: 'อีเมล', value: '' }] })).toBe(true);
+    expect(isComplete({ action: 'fillForm', fields: [{ label: '  ', value: '' }] })).toBe(false);
+    expect(isComplete({ action: 'fillForm', fields: [{ locator: { type: 'css', value: '#a' }, value: '' }, { locator: null, value: '' }] })).toBe(false);
+  });
 });
 
 describe('stepSchema (ตรวจข้อมูลที่เก็บในฐานข้อมูล)', () => {
@@ -100,6 +134,8 @@ describe('stepSchema (ตรวจข้อมูลที่เก็บใน�
     expect(stepSchema.safeParse({ action: 'fill', locator: null, secret: 'lowercase' }).success).toBe(false);
     expect(stepSchema.safeParse({ action: 'assertCount', locator: null, expected: 'x' }).success).toBe(false);
     expect(stepSchema.safeParse({ action: 'useTest', testId: 0 }).success).toBe(false);
+    expect(stepSchema.safeParse({ action: 'fillForm', fields: [{ locator: null }] }).success).toBe(false); // ไม่มี value
+    expect(stepSchema.safeParse({ action: 'fillForm', fields: Array.from({ length: 31 }, () => ({ value: '' })) }).success).toBe(false);
   });
 });
 
@@ -146,6 +182,20 @@ describe('codegen', () => {
   it('step ที่ยังไม่สมบูรณ์เป็น TODO', () => {
     expect(stepToCode(blankStep('click'))).toContain('TODO');
     expect(stepToCode(blankStep('useTest'))).toContain('TODO');
+    expect(stepToCode(blankStep('fillForm'))).toBe('// TODO: กรอกฟอร์มหลายช่อง — กรุณาเลือก element ของทุกช่อง');
+  });
+
+  it('fillForm สร้าง .fill() หนึ่งบรรทัดต่อช่อง และใช้ label เมื่อไม่มี locator', () => {
+    const code = stepToCode({
+      action: 'fillForm',
+      fields: [
+        { locator: { type: 'css', value: '#email' }, value: 'a@b.com' },
+        { label: ' ชื่อ ', value: "O'Neil" },
+      ],
+    });
+    expect(code).toBe("await page.locator('#email').fill('a@b.com');\nawait page.getByLabel('ชื่อ', { exact: true }).fill('O\\'Neil');");
+    const exported = exportTest('T', [{ action: 'fillForm', fields: [{ label: 'a', value: '1' }, { label: 'b', value: '2' }] }]);
+    expect(exported).toContain("  await page.getByLabel('a', { exact: true }).fill('1');\n  await page.getByLabel('b', { exact: true }).fill('2');");
   });
 });
 
@@ -155,6 +205,7 @@ describe('describe', () => {
     expect(describeStep({ action: 'fill', locator: { type: 'label', value: 'รหัสผ่าน' }, secret: 'PW' })).toBe('พิมพ์ ช่อง "รหัสผ่าน" •••••• (PW)');
     expect(describeStep({ action: 'selectOption', locator: { type: 'role', role: 'combobox', name: 'บทบาท' }, value: 'dev', label: 'Developer' })).toBe('เลือก dropdown "บทบาท" "Developer"');
     expect(describeStep(blankStep('click'))).toBe('คลิก (ยังไม่ได้เลือก element)');
+    expect(describeParts({ action: 'fillForm', fields: [{ label: 'a', value: '1' }, { label: 'b', value: '2' }] })).toMatchObject({ verb: 'กรอกฟอร์ม', value: '2 ช่อง' });
   });
 
   it('step useTest แสดงชื่อและจำนวน step ของเทสที่ใช้ซ้ำ', () => {

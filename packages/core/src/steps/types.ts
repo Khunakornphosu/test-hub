@@ -56,6 +56,7 @@ export const stepSchema = z.discriminatedUnion('action', [
   z.object({ ...id, action: z.literal('check'), ...target }),
   z.object({ ...id, action: z.literal('uncheck'), ...target }),
   z.object({ ...id, action: z.literal('fill'), ...target, value: z.string().optional(), secret: secretName.optional() }),
+  z.object({ ...id, action: z.literal('fillForm'), fields: z.array(z.object({ locator: locatorSchema.nullable().optional(), label: z.string().optional(), value: z.string() })).max(30) }),
   z.object({
     ...id,
     action: z.literal('press'),
@@ -92,6 +93,7 @@ export const ACTIONS: Record<ActionName, ActionSpec> = {
   goto: { label: 'เปิดหน้าเว็บ', group: 'action', fields: { value: 'URL' } },
   click: { label: 'คลิก', group: 'action', locator: 'required' },
   fill: { label: 'พิมพ์ข้อความ', group: 'action', locator: 'required', fields: { value: 'ข้อความที่จะพิมพ์' } },
+  fillForm: { label: 'กรอกฟอร์มหลายช่อง', group: 'action' },
   press: {
     label: 'กดปุ่มคีย์บอร์ด',
     group: 'action',

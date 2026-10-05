@@ -2,7 +2,7 @@
 import http from 'node:http';
 import { chromium, type Browser, type Page } from 'playwright';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { runStep, sanitizeStep, type Step } from '../src/index.js';
+import { blankStep, runStep, sanitizeStep, type Step } from '../src/index.js';
 
 const PAGES: Record<string, string> = {
   '/v1': `<h1>เข้าสู่ระบบ</h1>
@@ -16,6 +16,7 @@ const PAGES: Record<string, string> = {
     <button id="go" type="submit" onclick="document.title='clicked'">ลงชื่อเข้าใช้</button>`,
   // เว็บถูกแก้จนเป็นคนละปุ่ม: ไม่ใช่ element เดิมแล้ว
   '/v3': `<h1>เข้าสู่ระบบ</h1><a id="go" href="#">ไปหน้าสมัครสมาชิก</a>`,
+  '/form': `<label>ชื่อ <input id="name"></label><input id="phone" aria-label="เบอร์โทร">`,
 };
 
 let server: http.Server;
@@ -97,6 +98,22 @@ describe('runStep', () => {
     await expect(runStep(page, step)).rejects.toThrow('ยังไม่ได้ตั้งค่าตัวแปรลับ PW');
     await runStep(page, step, { secrets: { PW: 'hunter2' } });
     expect(await page.inputValue('#email')).toBe('hunter2');
+  });
+
+  it('fillForm กรอกทุกช่องใน step เดียว ทั้งจาก locator และ label', async () => {
+    await page.goto(`${base}/form`);
+    await runStep(page, sanitizeStep({
+      action: 'fillForm',
+      fields: [
+        { label: 'ชื่อ', value: 'สมชาย' },
+        { locator: { type: 'css', value: '#phone' }, value: '0812345678' },
+      ],
+    }));
+    expect(await page.inputValue('#name')).toBe('สมชาย');
+    expect(await page.inputValue('#phone')).toBe('0812345678');
+
+    await expect(runStep(page, blankStep('fillForm'))).rejects.toThrow('กรุณาระบุ label ของทุกช่องในฟอร์ม');
+    await expect(runStep(page, sanitizeStep({ action: 'fillForm', fields: [] }))).rejects.toThrow('กรุณาระบุ label ของทุกช่องในฟอร์ม');
   });
 
   it('goto ผ่าน checkUrl ก่อนเสมอ และ step ที่ไม่สมบูรณ์/useTest ไม่รัน', async () => {
