@@ -7,5 +7,5 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   reporter: 'list',
-  use: { ...devices['Desktop Chrome'], baseURL: process.env.WEB_URL || 'http://localhost:4700', screenshot: 'only-on-failure', trace: 'retain-on-failure' },
+  use: { ...devices['Desktop Chrome'], viewport: { width: 1440, height: 900 }, baseURL: process.env.WEB_URL || 'http://localhost:4700', screenshot: 'only-on-failure', trace: 'retain-on-failure' },
 });

@@ -100,10 +100,10 @@ export default function TestsPage() {
                 <td>{t.stepCount}</td>
                 <td>{t.lastPassed == null ? <Badge color="darkgrey" text="ยังไม่เคยรัน" /> : t.lastPassed ? <Badge color="green" icon="check-circle" text="ผ่าน" /> : <Badge color="red" icon="exclamation-triangle" text="ไม่ผ่าน" />}</td>
                 <td className={s.muted}>{when(t.updatedAt)}</td>
-                <td className={s.actions}>
+                <td><div className={s.actions}>
                   <IconButton name="pen" tooltip="เปลี่ยนชื่อ" aria-label={`เปลี่ยนชื่อ ${t.name}`} onClick={() => { setName(t.name); setDialog({ kind: 'rename', id: t.id }); }} />
                   <IconButton name="trash-alt" tooltip="ลบ" aria-label={`ลบ ${t.name}`} onClick={() => setToDelete(t)} />
-                </td>
+                </div></td>
               </tr>
             ))}
           </tbody>

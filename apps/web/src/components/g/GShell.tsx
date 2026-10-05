@@ -20,7 +20,7 @@ const crumbs: Record<string, string[]> = {
   '/': ['ภาพรวม'],
   '/tests': ['เทสเคส'],
   '/flows': ['Test Flow'],
-  '/workspace': ['เทสเคส', 'Login ด้วยอีเมล'],
+  '/workspace': ['เทสเคส', 'Workspace'],
   '/runs': ['ผลการรัน'],
   '/settings': ['ผู้ดูแล', 'ตั้งค่า'],
 };
@@ -65,7 +65,7 @@ export default function GShell({ children }: { children: ReactNode }) {
           <IconButton name="plus" tooltip="สร้างใหม่" aria-label="สร้างใหม่" />
           <IconButton name="question-circle" tooltip="ช่วยเหลือ" aria-label="ช่วยเหลือ" />
           <IconButton name="bell" tooltip="การแจ้งเตือน" aria-label="การแจ้งเตือน" />
-          <IconButton name="adjust-circle" tooltip={mode === 'dark' ? 'โหมดสว่าง' : 'โหมดมืด'} aria-label="สลับโหมดสว่าง/มืด" onClick={toggle} />
+          <IconButton name="adjust-circle" tooltip={mode === 'dark' ? 'สลับเป็นโหมดสว่าง' : 'สลับเป็นโหมดมืด'} onClick={toggle} />
           <span className={s.avatar} aria-label="ผู้ใช้">ส</span>
         </div>
       </header>

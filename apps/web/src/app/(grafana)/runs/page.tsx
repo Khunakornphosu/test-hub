@@ -32,7 +32,7 @@ const styles = (t: GrafanaTheme2) => ({
   page: css({ boxSizing: 'border-box', width: '100%', padding: t.spacing(3), display: 'grid', gap: t.spacing(2), maxWidth: 1480, margin: '0 auto', '@media (max-width: 760px)': { padding: t.spacing(2) } }),
   head: css({ display: 'flex', justifyContent: 'space-between', alignItems: 'center', h1: { margin: 0 } }),
   section: css({ h2: { marginTop: 0 } }),
-  detail: css({ padding: t.spacing(2), border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default, background: t.colors.background.primary }),
+  detail: css({ padding: t.spacing(2), border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default, background: t.colors.background.primary, h3: { marginTop: t.spacing(2.5) } }),
   detailHead: css({ display: 'flex', justifyContent: 'space-between', gap: t.spacing(2), alignItems: 'flex-start', flexWrap: 'wrap', h2: { marginTop: 0 } }),
   tableWrap: css({ overflowX: 'auto', border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default }),
   table: css({ width: '100%', minWidth: 760, borderCollapse: 'collapse', 'th, td': { textAlign: 'left', padding: t.spacing(1.25, 1.5), borderBottom: `1px solid ${t.colors.border.weak}`, borderRight: `1px solid ${t.colors.border.weak}` }, 'th:last-child, td:last-child': { borderRight: 0 }, th: { color: t.colors.text.secondary, fontWeight: 500, fontSize: t.typography.bodySmall.fontSize, background: t.colors.background.secondary, whiteSpace: 'nowrap' }, 'tbody tr:last-child td': { borderBottom: 0 }, 'tbody tr:hover': { background: t.colors.action.hover } }),
