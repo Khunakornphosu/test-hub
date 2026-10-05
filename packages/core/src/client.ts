@@ -6,3 +6,6 @@ export * from './steps/describe.js';
 export * from './steps/codegen.js';
 export * from './runs.js';
 export * from './protocol.js';
+export * from './automation/types.js';
+export * from './automation/schedule.js';
+export * from './automation/paths.js';

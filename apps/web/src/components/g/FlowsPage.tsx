@@ -4,7 +4,7 @@ import { addEdge, applyEdgeChanges, applyNodeChanges, Background, Controls, Hand
 import { Alert, Button, EmptyState, IconButton, Input, LoadingPlaceholder, Select, useStyles2 } from '@grafana/ui';
 import { css } from '@emotion/css';
 import type { GrafanaTheme2 } from '@grafana/data';
-import type { ServerMessage } from '@test-studio/core/client';
+import { flowPaths, type ServerMessage } from '@test-studio/core/client';
 import { api, type FlowEdge, type FlowNode, type FlowSummary, type TestSummary } from '@/lib/api';
 import { useProject } from '@/lib/project';
 import { useRunner } from '@/lib/runner';
@@ -39,24 +39,6 @@ function FitFlowToViewport() {
     return () => { clearTimeout(timer); window.removeEventListener('resize', fit); };
   }, [fitView]);
   return null;
-}
-
-function findPaths(nodes: FlowNode[], edges: FlowEdge[], cap = 101): string[][] {
-  if (!nodes.length) return [];
-  const outgoing = new Map<string, string[]>();
-  const incoming = new Set<string>();
-  for (const edge of edges) { outgoing.set(edge.source, [...(outgoing.get(edge.source) ?? []), edge.target]); incoming.add(edge.target); }
-  const roots = nodes.filter((node) => !incoming.has(node.id)).map((node) => node.id);
-  const paths: string[][] = [];
-  const walk = (id: string, prefix: string[]) => {
-    if (paths.length >= cap) return;
-    const path = [...prefix, id];
-    const next = outgoing.get(id) ?? [];
-    if (!next.length) paths.push(path);
-    else for (const child of next) walk(child, path);
-  };
-  for (const root of roots) walk(root, []);
-  return paths;
 }
 
 function hasCycle(source: string, target: string, edges: Edge[]): boolean {
@@ -166,7 +148,7 @@ export default function FlowsPage() {
   const activeFlow = flows.find((flow) => flow.id === flowId);
   const flowNodes = useMemo(() => nodes.map((node) => ({ id: node.id, type: 'testCase' as const, testId: node.data.testId, position: node.position })), [nodes]);
   const flowEdges = useMemo(() => edges.map((edge) => ({ id: edge.id, source: edge.source, target: edge.target, ...(typeof edge.label === 'string' && edge.label ? { label: edge.label } : {}) })), [edges]);
-  const paths = useMemo(() => findPaths(flowNodes, flowEdges), [flowNodes, flowEdges]);
+  const paths = useMemo(() => flowPaths(flowNodes, flowEdges), [flowNodes, flowEdges]);
 
   const refreshLists = useCallback(async (id: number) => {
     const [flowList, testList] = await Promise.all([api.flows(id), api.tests(id)]);

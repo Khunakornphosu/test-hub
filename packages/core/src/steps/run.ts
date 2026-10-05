@@ -112,13 +112,15 @@ export interface RunStepOptions {
   secrets?: Record<string, string>;
   /** ตรวจ URL ก่อน goto: โยน Error พร้อมเหตุผลถ้าไม่อนุญาต */
   checkUrl?: (url: string) => Promise<void> | void;
+  /** แปลง URL ของ step เปิดหน้าเว็บก่อนตรวจและเปิด (เช่น เปลี่ยนเป็นโดเมนของ environment) */
+  resolveUrl?: (url: string) => string;
 }
 
 /**
  * รัน step เดียว คืนค่า { healed } ถ้าต้องใช้ locator สำรอง
  * step useTest ต้องให้ผู้เรียกขยายเอง เพราะต้องโหลดเทสอื่นจากฐานข้อมูล
  */
-export async function runStep(page: Page, step: Step, { secrets = {}, checkUrl }: RunStepOptions = {}): Promise<{ healed?: Locator }> {
+export async function runStep(page: Page, step: Step, { secrets = {}, checkUrl, resolveUrl }: RunStepOptions = {}): Promise<{ healed?: Locator }> {
   if (!isComplete(step)) {
     throw new Error(step.action === 'useTest' ? 'step นี้ยังไม่ได้เลือกเทส' : step.action === 'fillForm' ? 'กรุณาระบุ label ของทุกช่องในฟอร์ม' : step.action === 'script' ? 'step นี้ยังไม่ได้เขียนโค้ด' : 'step นี้ยังไม่ได้เลือก element');
   }
@@ -126,10 +128,12 @@ export async function runStep(page: Page, step: Step, { secrets = {}, checkUrl }
   const L = resolved?.L as PwLocator;
   const opts = { timeout: STEP_TIMEOUT };
   switch (step.action) {
-    case 'goto':
-      if (checkUrl) await checkUrl(step.value);
-      await page.goto(step.value, { waitUntil: 'domcontentloaded' });
+    case 'goto': {
+      const url = resolveUrl ? resolveUrl(step.value) : step.value;
+      if (checkUrl) await checkUrl(url);
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
       break;
+    }
     case 'click':
       await L.click(opts);
       break;

@@ -16,6 +16,7 @@ export interface ExecContext extends DescribeContext {
   secrets: Record<string, string>;
   /** ตรวจ URL ก่อนเปิด (โยน Error พร้อมเหตุผลถ้าไม่อนุญาต) */
   checkUrl: (url: string) => Promise<void>;
+  resolveUrl?: (url: string) => string;
 }
 
 /** ข้อความ error ที่ผู้ใช้อ่านเข้าใจ (ตัดรายละเอียดทางเทคนิคของ Playwright ออก) */
@@ -29,7 +30,7 @@ const MAX_BLOCK_DEPTH = 5;
 /** รัน step หนึ่งตัว (ขยาย block ซ้อนได้) คืนรายการ step ที่ถูกซ่อมอัตโนมัติ */
 export async function execStep(page: Page, store: Store, step: Step & { id?: number }, testId: number, stack: number[], ctx: ExecContext): Promise<Healed[]> {
   if (step.action !== 'useTest') {
-    const { healed } = await runStep(page, step, { secrets: ctx.secrets, checkUrl: ctx.checkUrl });
+    const { healed } = await runStep(page, step, { secrets: ctx.secrets, checkUrl: ctx.checkUrl, resolveUrl: ctx.resolveUrl });
     return healed && step.id != null ? [{ testId, stepId: step.id, locator: healed, label: describeStep(step, ctx) }] : [];
   }
   const block = step.testId ? await store.repos.tests.get(step.testId) : null;
