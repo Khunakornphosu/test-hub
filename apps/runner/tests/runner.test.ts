@@ -290,6 +290,43 @@ describe('SSRF', () => {
     expect((await c.waitFor('runStep', (m) => m.status === 'failed')).error).toContain('ไม่อนุญาต');
     await c.close();
   }, 60_000);
+
+  it('step โค้ดเข้าถึงเครือข่ายภายในไม่ได้: fetch, เปลี่ยนหน้า, API ของระบบ และ WebRTC', async () => {
+    // บริการภายในจำลอง: ถ้ามี request หลุดมาถึง hits จะไม่เป็น 0
+    let hits = 0;
+    const internal = createServer((_req, res) => { hits++; res.end('internal'); });
+    await new Promise<void>((r) => internal.listen(0, '127.0.0.1', r));
+    const internalUrl = `http://127.0.0.1:${(internal.address() as { port: number }).port}/`;
+    const c = await Client.open();
+    c.send({ type: 'navigate', url: `${ORIGIN}/demo-login.html` });
+    await c.waitFor('url', (m) => m.url.endsWith('/demo-login.html'));
+    const run = async (script: string) => {
+      c.messages.length = 0;
+      c.send({ type: 'testScript', script });
+      return c.waitFor('scriptResult', () => true, 20_000);
+    };
+
+    expect(await run(`await fetch('${internalUrl}', { mode: 'no-cors' }).catch(() => {}); return 1;`)).toMatchObject({ ok: true });
+    expect(await run(`const img = new Image(); img.src = '${internalUrl}img'; await new Promise((r) => { img.onload = img.onerror = r; }); return 1;`)).toMatchObject({ ok: true });
+    expect(hits).toBe(0);
+    expect(await run(`return (await fetch('${ORIGIN}/api/secrets')).status;`)).toMatchObject({ ok: true, value: '403' });
+    const candidates = await run(`const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:10.0.0.1:3478' }] });
+pc.createDataChannel('x');
+const found = [];
+pc.onicecandidate = (e) => { if (e.candidate) found.push(e.candidate.type); };
+await pc.setLocalDescription(await pc.createOffer());
+await new Promise((r) => { const t = setTimeout(r, 3000); pc.onicegatheringstatechange = () => { if (pc.iceGatheringState === 'complete') { clearTimeout(t); r(); } }; });
+pc.close();
+return found;`);
+    expect(candidates).toMatchObject({ ok: true, value: '[]' });
+
+    await run(`location.href = '${internalUrl}';`);
+    await c.waitFor('url', (m) => m.url === internalUrl, 10_000);
+    expect(await run('return document.title;')).toMatchObject({ ok: true, value: 'ถูกบล็อก' });
+    expect(hits).toBe(0);
+    await c.close();
+    internal.close();
+  }, 60_000);
 });
 
 describe('ไม่รบกวนกัน', () => {

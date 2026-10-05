@@ -71,7 +71,9 @@ export async function createRunner({ store, config, guardEnv = process.env }: Ru
   const urlGuard = createUrlGuard({ appPort: config.appPort, env: guardEnv });
   const guardProxy = await startGuardProxy(urlGuard);
   // --disable-dev-shm-usage: /dev/shm ใน container มักเล็กเกินไปจน Chromium ล่ม
-  const browser: Browser = await chromium.launch({ headless: true, args: ['--disable-dev-shm-usage'], ...guardProxy.launchOptions });
+  // WebRTC ส่ง UDP ตรงโดยไม่ผ่าน proxy (STUN/ICE ไปที่อยู่ภายในได้) จึงบังคับให้ใช้เฉพาะเส้นทางที่ผ่าน proxy
+  const args = ['--disable-dev-shm-usage', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'];
+  const browser: Browser = await chromium.launch({ headless: true, args, ...guardProxy.launchOptions });
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
   const sessions = new Set<Session>();
