@@ -9,3 +9,4 @@ export * from './protocol.js';
 export * from './automation/types.js';
 export * from './automation/schedule.js';
 export * from './automation/paths.js';
+export * from './failure.js';

@@ -16,7 +16,10 @@ export interface BatchNotice {
   recovered?: boolean;
   /** ระบบรันไม่ได้ (ไม่ใช่เทสไม่ผ่าน) เช่น ไม่พบเทส */
   error?: string | null;
-  failures: { testName: string; error: string }[];
+  /** hint = สาเหตุที่น่าจะเป็น (จากกฎหรือ AI) */
+  failures: { testName: string; error: string; hint?: string }[];
+  /** เทสที่พังแล้วรันซ้ำผ่าน */
+  flaky?: string[];
   url?: string | null;
 }
 
@@ -38,8 +41,12 @@ export function formatNotice(n: BatchNotice): string {
   const lines = [`${status} ${n.projectName} · ${n.label} (${TRIGGER_LABELS[n.trigger]})`];
   if (n.error) lines.push(n.error);
   else lines.push([`ผ่าน ${n.total - n.failed}/${n.total}`, n.environmentName, duration(n.durationMs)].filter(Boolean).join(' · '));
-  for (const f of n.failures.slice(0, MAX_LISTED)) lines.push(`- ${f.testName}: ${f.error}`);
+  for (const f of n.failures.slice(0, MAX_LISTED)) {
+    lines.push(`- ${f.testName}: ${f.error}`);
+    if (f.hint) lines.push(`  → ${f.hint}`);
+  }
   if (n.failures.length > MAX_LISTED) lines.push(`- และอีก ${n.failures.length - MAX_LISTED} เทส`);
+  if (n.flaky?.length) lines.push(`ไม่เสถียร (พังครั้งแรกแล้วรันซ้ำผ่าน): ${n.flaky.slice(0, MAX_LISTED).join(', ')}${n.flaky.length > MAX_LISTED ? ` และอีก ${n.flaky.length - MAX_LISTED} เทส` : ''}`);
   if (n.url) lines.push(`ดูผล: ${n.url}`);
   return lines.join('\n');
 }

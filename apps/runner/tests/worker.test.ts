@@ -13,13 +13,16 @@ let base = '';
 let worker: Worker | null = null;
 const sent: { config: ChannelConfig; notice: BatchNotice }[] = [];
 const visited: string[] = [];
+let flakyHits = 0;
 
 beforeAll(async () => {
   store = openStore({ url: process.env.TEST_DATABASE_URL, cipher: createCipher(null, { SECRET_KEY: 'worker-test-key' }), max: 3 });
   server = createServer((req, res) => {
     visited.push(`${req.headers.host}${req.url}`);
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end(`<!doctype html><meta charset="utf-8"><title>t</title><h1>${req.url?.startsWith('/stg') ? 'staging' : 'production'}</h1>`);
+    // /flaky: ครั้งแรกแสดงหน้าผิด ครั้งถัดไปถูก (จำลองเทสที่ไม่เสถียร)
+    const heading = req.url?.startsWith('/stg') ? 'staging' : req.url === '/flaky' && flakyHits++ === 0 ? 'กำลังโหลด…' : 'production';
+    res.end(`<!doctype html><meta charset="utf-8"><title>t</title><h1>${heading}</h1>`);
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
@@ -67,7 +70,13 @@ describe('worker', () => {
     expect(runs.items.map((r) => [r.testName, r.passed]).sort()).toEqual([['พังเสมอ', false], ['หน้าแรก', true]]);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.notice).toMatchObject({ label: 'กดรัน', trigger: 'manual', total: 2, failed: 1, url: `https://ts.test/runs?batch=${batchId}&project=all` });
-    expect(sent[0]!.notice.failures).toEqual([{ testName: 'พังเสมอ', error: expect.stringContaining('URL ไม่ตรง') }]);
+    expect(sent[0]!.notice.failures).toEqual([{ testName: 'พังเสมอ', error: expect.stringContaining('URL ไม่ตรง'), hint: 'ไปไม่ถึงหน้าที่คาด' }]);
+    // เทสที่พังจริง: รันซ้ำแล้วยังพัง เก็บ trace และสาเหตุจากข้อความ error
+    const failedRun = runs.items.find((r) => !r.passed)!;
+    const detail = (await store.repos.runs.get(failedRun.id))!;
+    expect(detail).toMatchObject({ flaky: false, hasTrace: true, analysis: { category: 'navigation', source: 'rules' } });
+    expect((await store.repos.runs.trace(failedRun.id))!.subarray(0, 2).toString()).toBe('PK'); // zip
+    expect(detail.hasScreenshot).toBe(true);
 
     // แก้เทสให้ผ่าน: รอบถัดไปแจ้ง "กลับมาผ่าน" ส่วนรอบที่ผ่านติดกันไม่แจ้ง
     await store.repos.tests.saveSteps(fail, [{ id: 1, action: 'goto', value: `${base}/x` }]);
@@ -78,6 +87,24 @@ describe('worker', () => {
     await store.repos.batches.enqueue({ projectId, target: { type: 'project' }, trigger: 'manual', label: 'กดรัน' });
     await worker!.tick();
     expect(sent).toHaveLength(2);
+  }, 60_000);
+
+  it('พังครั้งแรกแล้วรันซ้ำผ่าน: นับเป็นผ่านแต่ติดป้ายไม่เสถียร เก็บ trace ของครั้งที่พัง', async () => {
+    const { projectId } = await setup();
+    flakyHits = 0;
+    const flakyTest = await store.repos.tests.create(projectId, 'บางทีก็พัง');
+    await store.repos.tests.saveSteps(flakyTest, [{ id: 1, action: 'goto', value: `${base}/flaky` }, { id: 2, action: 'assertText', locator: { type: 'css', value: 'h1' }, expected: 'production' }]);
+    await store.repos.channels.create(projectId, { name: 'ทุกครั้ง', config: { type: 'webhook', url: 'https://hooks.example.com/x' }, notifyOn: 'always' });
+    const batchId = await store.repos.batches.enqueue({ projectId, target: { type: 'test', id: flakyTest }, trigger: 'api', label: 'CI' });
+    await worker!.tick();
+
+    expect(await store.repos.batches.get(batchId)).toMatchObject({ status: 'done', total: 1, failed: 0, flaky: 1 });
+    const [run] = (await store.repos.runs.listPage({ batchId, limit: 5, offset: 0 })).items;
+    const detail = (await store.repos.runs.get(run!.id))!;
+    expect(detail).toMatchObject({ passed: true, flaky: true, hasTrace: true, retryError: expect.stringContaining('ข้อความไม่ตรง'), analysis: { category: 'assertion' } });
+    expect((await store.repos.runs.listPage({ projectId, flaky: true, limit: 5, offset: 0 })).total).toBe(1);
+    const always = sent.find((x) => x.config.type === 'webhook')!;
+    expect(always.notice).toMatchObject({ failed: 0, flaky: ['บางทีก็พัง'] });
   }, 60_000);
 
   it('environment เปลี่ยนโดเมนของ step เปิดหน้าเว็บ', async () => {

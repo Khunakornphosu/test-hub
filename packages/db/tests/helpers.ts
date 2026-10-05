@@ -4,7 +4,7 @@ import postgres from 'postgres';
 export async function resetDb(url = process.env.TEST_DATABASE_URL!): Promise<void> {
   const raw = postgres(url, { max: 1 });
   try {
-    await raw.unsafe('truncate projects, tests, secrets, runs, flows, environments, schedules, notification_channels, api_tokens, run_batches restart identity cascade');
+    await raw.unsafe('truncate projects, tests, secrets, runs, run_traces, flows, environments, schedules, notification_channels, api_tokens, run_batches restart identity cascade');
   } finally {
     await raw.end();
   }

@@ -21,6 +21,8 @@ const envSchema = z.object({
   /** รันอัตโนมัติ (ตั้งเวลา/CI) ในเครื่องนี้ ปิดได้ถ้ามี runner หลายตัวแล้วอยากให้บางตัวรับแค่ Workspace */
   WORKER: z.enum(['true', 'false', '1', '0']).default('true').transform((v) => v === 'true' || v === '1'),
   WORKER_POLL_SECONDS: z.coerce.number().int().min(1).max(3600).default(15),
+  /** รันอัตโนมัติ: พังแล้วรันซ้ำกี่ครั้ง ถ้าครั้งหลังผ่านจะติดป้าย "ไม่เสถียร" (0 = ไม่รันซ้ำ) */
+  WORKER_RETRIES: z.coerce.number().int().min(0).max(3).default(1),
   /** URL ของหน้าเว็บ ใช้ทำลิงก์ "ดูผล" ในแจ้งเตือน เช่น https://test-studio.example.com */
   PUBLIC_APP_URL: z.string().url().optional(),
 });
@@ -35,7 +37,7 @@ export interface RunnerConfig {
   allowedOrigins: string[];
   maxSessions: number;
   runMigrations: boolean;
-  worker: { enabled: boolean; pollMs: number; publicAppUrl?: string };
+  worker: { enabled: boolean; pollMs: number; retries?: number; publicAppUrl?: string };
 }
 
 const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1']);
@@ -60,6 +62,6 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     allowedOrigins: e.ALLOWED_ORIGINS.split(',').map((s) => s.trim()).filter(Boolean),
     maxSessions: e.MAX_SESSIONS,
     runMigrations: e.RUN_MIGRATIONS,
-    worker: { enabled: e.WORKER, pollMs: e.WORKER_POLL_SECONDS * 1000, publicAppUrl: e.PUBLIC_APP_URL },
+    worker: { enabled: e.WORKER, pollMs: e.WORKER_POLL_SECONDS * 1000, retries: e.WORKER_RETRIES, publicAppUrl: e.PUBLIC_APP_URL },
   };
 }

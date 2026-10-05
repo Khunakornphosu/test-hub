@@ -34,7 +34,7 @@ export interface ScheduleInfo { id: number; projectId: number; name: string; tar
 export interface ScheduleInput { name: string; target: RunTarget; timing: ScheduleTiming; environmentId: number | null; enabled: boolean }
 export interface ChannelInfo { id: number; projectId: number; name: string; type: ChannelType; notifyOn: 'problems' | 'always'; enabled: boolean; destination: string }
 export interface TokenInfo { id: number; projectId: number; name: string; prefix: string; createdAt: string; lastUsedAt: string | null }
-export interface BatchInfo { id: number; projectId: number; target: RunTarget; trigger: 'schedule' | 'api' | 'manual'; label: string; scheduleId: number | null; environmentName: string | null; status: 'queued' | 'running' | 'done' | 'error'; total: number; failed: number; error: string | null; createdAt: string; startedAt: string | null; finishedAt: string | null; passed: boolean | null }
+export interface BatchInfo { id: number; projectId: number; target: RunTarget; trigger: 'schedule' | 'api' | 'manual'; label: string; scheduleId: number | null; environmentName: string | null; status: 'queued' | 'running' | 'done' | 'error'; total: number; failed: number; flaky: number; error: string | null; createdAt: string; startedAt: string | null; finishedAt: string | null; passed: boolean | null }
 
 export const api = {
   projects: () => call<Project[]>('GET', '/api/projects'),

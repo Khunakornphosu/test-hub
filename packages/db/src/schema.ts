@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { boolean, customType, index, integer, jsonb, pgTable, primaryKey, serial, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
-import type { BatchStatus, BatchTrigger, ChannelType, NotifyOn, RunStepResult, RunTarget, ScheduleTiming, Step } from '@test-studio/core';
+import type { BatchStatus, BatchTrigger, ChannelType, FailureAnalysis, NotifyOn, RunStepResult, RunTarget, ScheduleTiming, Step } from '@test-studio/core';
 
 const bytea = customType<{ data: Buffer; driverData: Buffer }>({
   dataType: () => 'bytea',
@@ -141,6 +141,8 @@ export const runBatches = pgTable(
     status: text('status').$type<BatchStatus>().notNull().default('queued'),
     total: integer('total').notNull().default(0),
     failed: integer('failed').notNull().default(0),
+    /** เทสที่พังแล้วรันซ้ำผ่าน (นับเป็นผ่าน) */
+    flaky: integer('flaky').notNull().default(0),
     error: text('error'),
     createdAt: createdAt(),
     startedAt: timestamp('started_at', { withTimezone: true }),
@@ -161,6 +163,19 @@ export const runs = pgTable(
     results: jsonb('results').$type<RunStepResult[]>().notNull(),
     /** screenshot ตอนพัง (JPEG) */
     screenshot: bytea('screenshot'),
+    /** พังครั้งแรกแล้วรันซ้ำผ่าน */
+    flaky: boolean('flaky').notNull().default(false),
+    /** error ของครั้งแรกที่พัง (เมื่อรันซ้ำ) */
+    retryError: text('retry_error'),
+    /** สาเหตุที่น่าจะเป็นของการพัง (จากกฎหรือ AI) */
+    analysis: jsonb('analysis').$type<FailureAnalysis>(),
   },
   (t) => [index('runs_test_idx').on(t.testId, t.id), index('runs_batch_idx').on(t.batchId)]
 );
+
+/** Playwright trace (zip) ของการรันที่พัง แยกตารางเพราะไฟล์ใหญ่ และลบเก่าทิ้งเป็นระยะ */
+export const runTraces = pgTable('run_traces', {
+  runId: integer('run_id').primaryKey().references(() => runs.id, { onDelete: 'cascade' }),
+  data: bytea('data').notNull(),
+  createdAt: createdAt(),
+});

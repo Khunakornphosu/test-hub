@@ -9,7 +9,8 @@ export const GET = route(async ({ req, store }) => {
   const batchId = Number(url.searchParams.get('batchId')) || undefined;
   const status = url.searchParams.get('status');
   const passed = status === 'passed' ? true : status === 'failed' ? false : undefined;
+  const flaky = status === 'flaky' ? true : undefined;
   const pageSize = Math.min(Number(url.searchParams.get('pageSize')) || 20, 100);
   const page = Math.max(Number(url.searchParams.get('page')) || 1, 1);
-  return store.repos.runs.listPage({ projectId, testId, batchId, passed, limit: pageSize, offset: (page - 1) * pageSize });
+  return store.repos.runs.listPage({ projectId, testId, batchId, passed, flaky, limit: pageSize, offset: (page - 1) * pageSize });
 });

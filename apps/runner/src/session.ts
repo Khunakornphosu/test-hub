@@ -32,6 +32,7 @@ import type { Store } from '@test-studio/db';
 import type { Browser, BrowserContext, CDPSession, Page } from 'playwright';
 import { verifyAiSteps } from './ai-verify.js';
 import { computeHealth, runSteps, type StepWithId } from './executor.js';
+import { analyzeFailure, startTrace, stopTrace } from './insights.js';
 import { clearHighlight, elementAt, focusedEditable, highlightAt, highlightLocator, inspect, targetFor, type ElementInfo, type Handle, type Target } from './recorder.js';
 
 type ActiveMode = Exclude<Mode, 'assertURL'>;
@@ -614,7 +615,9 @@ export class Session {
         secrets: await this.store.repos.secrets.values(test.projectId),
         checkUrl: (url: string) => this.assertUrlAllowed(url),
       };
+      await startTrace(this.context!).catch(() => {});
       const outcome = await runSteps(this.page, this.store, test.id, this.steps, ctx, { step: (e) => this.send({ type: 'runStep', ...e }) });
+      const trace = await stopTrace(this.context!, !outcome.passed);
       const runId = await this.store.repos.runs.create({
         testId: test.id,
         startedAt: outcome.startedAt,
@@ -623,6 +626,15 @@ export class Session {
         results: outcome.results,
         screenshot: outcome.screenshot,
       });
+      if (trace) await this.store.repos.runs.saveTrace(runId, trace);
+      // อธิบายสาเหตุเบื้องหลัง ไม่ให้ผู้ใช้รอ AI ก่อนเห็นผลรัน
+      if (!outcome.passed) {
+        const labels = this.steps.map((st) => describeStep(st, ctx));
+        void this.store.repos.tests.get(test.id)
+          .then((record) => analyzeFailure(outcome, record?.name ?? '', labels))
+          .then((analysis) => analysis && this.store.repos.runs.setAnalysis(runId, analysis))
+          .catch((err) => console.warn('[insights]', (err as Error).message));
+      }
       this.running = false;
       this.health = await computeHealth(this.store, test.id);
       this.send({ type: 'runDone', passed: outcome.passed, ms: outcome.durationMs, runId, hasScreenshot: !!outcome.screenshot, healedCount: outcome.healedCount });

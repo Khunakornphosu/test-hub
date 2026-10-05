@@ -3,6 +3,7 @@
 import { sanitizeStep } from '../steps/sanitize.js';
 import { ACTIONS, type Step } from '../steps/types.js';
 import { RESPONSE_SCHEMA, SYSTEM_PROMPT } from './prompt.js';
+import { FAILURE_CATEGORIES, failureAnalysisSchema, type FailureAnalysis } from '../failure.js';
 
 type Env = Record<string, string | undefined>;
 // อ่านค่าตอนใช้งาน (ไม่ใช่ตอน import) เพราะ server อาจโหลด .env หลังจาก import โมดูลแล้ว
@@ -200,4 +201,70 @@ export async function generateSteps(input: GenerateStepsInput): Promise<{ model:
     }
   });
   return { model, explanation: String(parsed.explanation ?? ''), steps };
+}
+
+export interface ExplainFailureInput {
+  testName: string;
+  /** คำอธิบาย step ทั้งหมดของเทส */
+  steps: string[];
+  /** ลำดับ step ที่พัง (0-based) */
+  failedIndex: number;
+  error: string;
+  url: string;
+  title: string;
+  /** ARIA snapshot ตอนพัง (ผ่าน redactSnapshot แล้ว) */
+  snapshot?: string;
+  /** ภาพหน้าจอตอนพัง (JPEG) */
+  screenshot?: Buffer | null;
+}
+
+const EXPLAIN_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    category: { type: 'STRING', enum: Object.keys(FAILURE_CATEGORIES) },
+    summary: { type: 'STRING' },
+    suggestion: { type: 'STRING' },
+  },
+  required: ['category', 'summary', 'suggestion'],
+};
+
+const EXPLAIN_PROMPT = `You help manual QA testers (Thai speakers, not programmers) understand why an automated web UI test failed.
+You get the test steps, the failing step, the error, the page URL/title, an ARIA snapshot and a screenshot taken right after the failure.
+Decide the most likely cause:
+- locator: the element the step targets was renamed, moved or removed (UI changed, test needs updating)
+- assertion: the page loaded but shows different text/count than the test expects
+- navigation: the flow ended up on another page (e.g. login failed, a modal or interstitial appeared)
+- network: the site did not load (down, wrong URL/environment)
+- blocked: the runner refused the URL (internal address, not allow-listed)
+- data: test data or secrets missing/invalid (e.g. account locked, wrong password)
+- script: a custom JavaScript step itself is broken
+- app: the application is broken (error page, crash, 500, obviously wrong behaviour) — a real bug to report
+- unknown: not enough evidence
+Answer in Thai. summary: 1-2 short sentences describing what is visible on the page and why the step failed. suggestion: one concrete next action for the tester. Do not invent details that are not in the evidence.`;
+
+/** ให้ AI อธิบายสาเหตุที่เทสพังเป็นภาษาไทย (ใช้ภาพหน้าจอ + หน้าเว็บตอนพัง) */
+export async function explainFailure(input: ExplainFailureInput): Promise<FailureAnalysis> {
+  if (!apiKey()) throw new Error('ยังไม่ได้ตั้งค่า GEMINI_API_KEY');
+  const text = [
+    `Test: ${input.testName}`,
+    'Steps:',
+    ...input.steps.map((s, i) => `${i + 1}. ${s}${i === input.failedIndex ? '   <-- FAILED HERE' : ''}`),
+    '',
+    `Error: ${input.error}`,
+    `URL at failure: ${input.url}`,
+    `Page title: ${input.title}`,
+    ...(input.snapshot ? ['', 'ARIA snapshot at failure:', '```yaml', input.snapshot, '```'] : []),
+  ].join('\n');
+  const parts: unknown[] = [{ text }];
+  if (input.screenshot?.length) parts.push({ inline_data: { mime_type: 'image/jpeg', data: input.screenshot.toString('base64') } });
+  const { model, data } = await generateWithFallback(
+    JSON.stringify({
+      systemInstruction: { parts: [{ text: EXPLAIN_PROMPT }] },
+      contents: [{ role: 'user', parts }],
+      generationConfig: { responseMimeType: 'application/json', responseSchema: EXPLAIN_SCHEMA, temperature: 0.1 },
+    })
+  );
+  const raw = data.candidates?.[0]?.content?.parts?.map((p) => p.text ?? '').join('') ?? '';
+  const answer = JSON.parse(raw) as { category?: unknown; summary?: unknown; suggestion?: unknown };
+  return failureAnalysisSchema.parse({ category: answer.category, summary: String(answer.summary ?? '').slice(0, 400), suggestion: String(answer.suggestion ?? '').slice(0, 400), source: 'ai', model });
 }

@@ -84,7 +84,7 @@ function Batches({ projectId }: Ctx) {
           <td><b>{b.label}</b>{b.error && <div className={s.errorText}>{b.error}</div>}</td>
           <td className={s.muted}>{TRIGGER[b.trigger]}</td>
           <td className={s.muted}>{b.environmentName ?? '—'}</td>
-          <td>{b.status === 'queued' ? '—' : `${b.total - b.failed}/${b.total}`}</td>
+          <td>{b.status === 'queued' ? '—' : `${b.total - b.failed}/${b.total}`}{b.flaky > 0 && <div className={s.flakyText}>ไม่เสถียร {b.flaky}</div>}</td>
           <td className={s.muted}>{when(b.startedAt ?? b.createdAt)}</td>
           <td>{b.total > 0 && <Link className={s.link} href={`/runs?batch=${b.id}&project=all`}>ดูผล</Link>}</td>
         </tr>)}
@@ -355,6 +355,7 @@ const styles = (t: GrafanaTheme2) => ({
   tableWrap: css({ overflowX: 'auto', border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default }),
   table: css({ width: '100%', minWidth: 720, borderCollapse: 'collapse', 'th, td': { textAlign: 'left', padding: t.spacing(1, 1.5), borderBottom: `1px solid ${t.colors.border.weak}`, verticalAlign: 'middle' }, th: { color: t.colors.text.secondary, fontWeight: 500, fontSize: t.typography.bodySmall.fontSize, background: t.colors.background.secondary, whiteSpace: 'nowrap' }, 'tbody tr:last-child td': { borderBottom: 0 }, code: { fontSize: 12 } }),
   muted: css({ color: t.colors.text.secondary }),
+  flakyText: css({ color: t.colors.warning.text, fontSize: t.typography.bodySmall.fontSize }),
   errorText: css({ color: t.colors.error.text, fontSize: t.typography.bodySmall.fontSize }),
   link: css({ color: t.colors.text.link, '&:hover': { textDecoration: 'underline' } }),
   actions: css({ display: 'flex', gap: t.spacing(1), justifyContent: 'flex-end', alignItems: 'center' }),

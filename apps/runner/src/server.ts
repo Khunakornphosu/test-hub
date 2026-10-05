@@ -81,7 +81,7 @@ export async function createRunner(options: RunnerOptions): Promise<Runner> {
   const args = ['--disable-dev-shm-usage', '--force-webrtc-ip-handling-policy=disable_non_proxied_udp'];
   const browser: Browser = await chromium.launch({ headless: true, args, ...guardProxy.launchOptions });
 
-  const worker = config.worker.enabled ? startWorker({ store, browser, urlGuard, pollMs: config.worker.pollMs, publicAppUrl: config.worker.publicAppUrl, notify: options.notify }) : null;
+  const worker = config.worker.enabled ? startWorker({ store, browser, urlGuard, pollMs: config.worker.pollMs, retries: config.worker.retries, publicAppUrl: config.worker.publicAppUrl, notify: options.notify }) : null;
 
   const wss = new WebSocketServer({ noServer: true, maxPayload: 256 * 1024 });
   const sessions = new Set<Session>();

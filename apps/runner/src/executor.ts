@@ -1,6 +1,7 @@
 // รันเทสทั้งชุด: ขยาย block (useTest), เก็บผลรายสเต็ป, screenshot ตอนพัง และบันทึกประวัติ
 import {
   describeStep,
+  redactSnapshot,
   runStep,
   type DescribeContext,
   type Healed,
@@ -52,8 +53,18 @@ export interface RunEvents {
   step(event: { id: number; status: 'running' | 'skipped' } | ({ id: number } & RunStepResult)): void;
 }
 
+/** สภาพหน้าเว็บตอนพัง ใช้ให้ AI อธิบายสาเหตุ */
+export interface FailureContext {
+  index: number;
+  error: string;
+  url: string;
+  title: string;
+  snapshot?: string;
+}
+
 export interface RunOutcome {
   passed: boolean;
+  failure?: FailureContext;
   durationMs: number;
   results: RunStepResult[];
   screenshot: Buffer | null;
@@ -71,8 +82,9 @@ export async function runSteps(page: Page, store: Store, testId: number, steps: 
   const results: RunStepResult[] = [];
   let screenshot: Buffer | null = null;
   let failed = false;
+  let failure: FailureContext | undefined;
 
-  for (const step of steps) {
+  for (const [index, step] of steps.entries()) {
     const label = describeStep(step, ctx);
     if (failed) {
       results.push({ stepId: step.id, label, status: 'skipped' });
@@ -89,6 +101,13 @@ export async function runSteps(page: Page, store: Store, testId: number, steps: 
       failed = true;
       result = { stepId: step.id, label, status: 'failed', error: friendlyError(err) };
       screenshot = await page.screenshot({ type: 'jpeg', quality: 70 }).catch(() => null);
+      failure = {
+        index,
+        error: result.error!,
+        url: page.url(),
+        title: await page.title().catch(() => ''),
+        snapshot: await page.locator('body').ariaSnapshot({ timeout: 2000 }).then(redactSnapshot).catch(() => undefined),
+      };
     }
     result.ms = Date.now() - t0;
     results.push(result);
@@ -97,6 +116,7 @@ export async function runSteps(page: Page, store: Store, testId: number, steps: 
 
   return {
     passed: !failed,
+    failure,
     durationMs: Date.now() - started,
     results,
     screenshot,

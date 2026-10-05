@@ -243,6 +243,7 @@ export interface BatchRecord {
   status: BatchStatus;
   total: number;
   failed: number;
+  flaky: number;
   error: string | null;
   createdAt: Date;
   startedAt: Date | null;
@@ -262,6 +263,7 @@ const batchColumns = {
   status: runBatches.status,
   total: runBatches.total,
   failed: runBatches.failed,
+  flaky: runBatches.flaky,
   error: runBatches.error,
   createdAt: runBatches.createdAt,
   startedAt: runBatches.startedAt,
@@ -295,10 +297,10 @@ export function batchesRepo(db: Db) {
       const id = rows[0]?.id;
       return id ? this.get(id) : null;
     },
-    async progress(id: number, value: { total: number; failed: number }): Promise<void> {
+    async progress(id: number, value: { total: number; failed: number; flaky?: number }): Promise<void> {
       await db.update(runBatches).set(value).where(eq(runBatches.id, id));
     },
-    async finish(id: number, value: { total: number; failed: number; error?: string | null }): Promise<void> {
+    async finish(id: number, value: { total: number; failed: number; flaky?: number; error?: string | null }): Promise<void> {
       await db.update(runBatches).set({ ...value, error: value.error ?? null, status: value.error ? 'error' : 'done', finishedAt: sql`now()` }).where(eq(runBatches.id, id));
     },
     /** รอบก่อนหน้าของตารางเวลาเดียวกัน (หรือเป้าหมายเดียวกันถ้าไม่ได้มาจากตารางเวลา) ใช้ตัดสินว่า "กลับมาผ่าน" */
