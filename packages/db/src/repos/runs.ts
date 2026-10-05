@@ -1,4 +1,4 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { tests } from '../schema.js';
 import { runResultsSchema, type RunStepResult } from '@test-studio/core';
 import type { Db } from '../client.js';
@@ -72,6 +72,27 @@ export function runsRepo(db: Db) {
         .innerJoin(tests, eq(tests.id, runs.testId));
       const filtered = options.projectId != null ? query.where(eq(tests.projectId, options.projectId)) : query;
       return filtered.orderBy(desc(runs.startedAt), desc(runs.id)).limit(Math.min(options.limit ?? 50, 200));
+    },
+    /** ผลการรันแบบแบ่งหน้า (ใหม่สุดก่อน) พร้อมจำนวนทั้งหมด */
+    async listPage(options: { projectId?: number; batchId?: number; limit: number; offset: number }): Promise<{ items: RecentRun[]; total: number }> {
+      const conditions = [
+        options.projectId != null ? eq(tests.projectId, options.projectId) : undefined,
+        options.batchId != null ? eq(runs.batchId, options.batchId) : undefined,
+      ].filter((c) => c !== undefined);
+      const where = conditions.length ? and(...conditions) : undefined;
+      const limit = Math.min(Math.max(options.limit, 1), 100);
+      const [items, [count]] = await Promise.all([
+        db
+          .select({ ...summaryColumns, testId: runs.testId, testName: tests.name, projectId: tests.projectId })
+          .from(runs)
+          .innerJoin(tests, eq(tests.id, runs.testId))
+          .where(where)
+          .orderBy(desc(runs.startedAt), desc(runs.id))
+          .limit(limit)
+          .offset(Math.max(options.offset, 0)),
+        db.select({ total: sql<number>`count(*)::int` }).from(runs).innerJoin(tests, eq(tests.id, runs.testId)).where(where),
+      ]);
+      return { items, total: count?.total ?? 0 };
     },
     async screenshot(id: number): Promise<Buffer | null> {
       const [row] = await db.select({ screenshot: runs.screenshot }).from(runs).where(eq(runs.id, id));

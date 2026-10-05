@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { css } from '@emotion/css';
 import type { GrafanaTheme2 } from '@grafana/data';
 import { Alert, Badge, Button, ConfirmModal, EmptyState, Field, Icon, IconButton, Input, LoadingPlaceholder, Modal, Select, useStyles2 } from '@grafana/ui';
+import TablePager, { usePaged } from './TablePager';
 import { api, type TestSummary } from '@/lib/api';
 import { useProject } from '@/lib/project';
 
@@ -60,6 +61,7 @@ export default function TestsPage() {
     else if (dialog?.kind === 'project') createProject.mutate(n);
     else if (dialog?.kind === 'rename') rename.mutate({ id: dialog.id!, name: n });
   };
+  const pagedTests = usePaged(tests.data ?? []);
   const titles = { test: 'สร้างเทสเคสใหม่', project: 'สร้างโปรเจกต์ใหม่', rename: 'เปลี่ยนชื่อเทสเคส' };
 
   if (projectsError) return <div className={s.page}><Alert severity="error" title="โหลดโปรเจกต์ไม่ได้">{projectsError.message}</Alert></div>;
@@ -94,7 +96,7 @@ export default function TestsPage() {
         <div className={s.tableWrap}><table className={s.table}>
           <thead><tr><th>ชื่อ</th><th>Steps</th><th>รันล่าสุด</th><th>แก้ไขเมื่อ</th><th aria-label="จัดการ" /></tr></thead>
           <tbody>
-            {tests.data.map((t) => (
+            {pagedTests.visible.map((t) => (
               <tr key={t.id} data-testid="test-row">
                 <td><Link href={`/workspace?test=${t.id}`} className={s.link}>{t.name}</Link></td>
                 <td>{t.stepCount}</td>
@@ -109,6 +111,7 @@ export default function TestsPage() {
           </tbody>
         </table></div>
       )}
+      {tests.data && tests.data.length > 0 && <TablePager {...pagedTests.pager} label="เทส" />}
 
       <Modal title={dialog ? titles[dialog.kind] : ''} isOpen={dialog != null} onDismiss={close}>
         <form onSubmit={(e) => { e.preventDefault(); submit(); }}>

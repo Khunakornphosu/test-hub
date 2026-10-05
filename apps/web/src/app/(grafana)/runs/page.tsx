@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { css } from '@emotion/css';
 import type { GrafanaTheme2 } from '@grafana/data';
 import { Alert, Badge, Button, useStyles2 } from '@grafana/ui';
-import { api } from '@/lib/api';
+import TablePager from '@/components/g/TablePager';
 
 type Recent = { id: number; testId: number; testName: string; projectId: number; startedAt: string; durationMs: number; passed: boolean; hasScreenshot: boolean };
 type Detail = Recent & { results: { status: string; action?: string; label?: string; error?: string; durationMs?: number; healed?: unknown[] }[] };
@@ -14,17 +14,24 @@ export default function Page() {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
-  const load = () => { setLoading(true); fetch('/api/runs?limit=100').then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); setRuns(d); }).catch((e) => setError(e.message)).finally(() => setLoading(false)); };
-  useEffect(() => { load(); const run = Number(new URLSearchParams(location.search).get('run')); if (run) void openRun(run); }, []);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const load = useCallback((p = page, size = pageSize) => {
+    setLoading(true);
+    fetch(`/api/runs?page=${p}&pageSize=${size}`).then(async (r) => { const d = await r.json(); if (!r.ok) throw new Error(d.error); setRuns(d.items); setTotal(d.total); }).catch((e) => setError(e.message)).finally(() => setLoading(false));
+  }, [page, pageSize]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => { const run = Number(new URLSearchParams(location.search).get('run')); if (run) void openRun(run); }, []);
   const openRun = async (id: number) => { try { const r = await fetch(`/api/runs/${id}`); const d = await r.json(); if (!r.ok) throw new Error(d.error); setDetail(d); } catch (e) { setError((e as Error).message); } };
   return <div className={s.page}>
-    <div className={s.head}><h1>ผลการรัน</h1><Button icon="sync" onClick={load}>โหลดใหม่</Button></div>
+    <div className={s.head}><h1>ผลการรัน</h1><Button icon="sync" onClick={() => load()}>โหลดใหม่</Button></div>
     {error && <Alert severity="error" title={error} onRemove={() => setError('')} />}
     {detail && <section className={s.detail}><div className={s.detailHead}><div><h2>{detail.testName} · #{detail.id}</h2><div>{new Date(detail.startedAt).toLocaleString('th-TH')} · {(detail.durationMs / 1000).toFixed(2)} วินาที · <Badge color={detail.passed ? 'green' : 'red'} text={detail.passed ? 'ผ่าน' : 'ไม่ผ่าน'} /></div></div><Button variant="secondary" onClick={() => setDetail(null)}>ปิดรายละเอียด</Button></div>
       <h3>ผลแต่ละขั้นตอน</h3><ol>{detail.results.map((step, i) => <li key={i} style={{ padding: 8, borderBottom: '1px solid var(--border-weak)' }}><Badge color={step.status === 'passed' ? 'green' : step.status === 'failed' ? 'red' : 'blue'} text={step.status === 'passed' ? 'ผ่าน' : step.status === 'failed' ? 'ไม่ผ่าน' : step.status} /> <b>{step.label ?? step.action ?? `ขั้นตอน ${i + 1}`}</b> {step.durationMs != null && <small>{step.durationMs} ms</small>}{step.error && <p style={{ color: 'var(--error-text)' }}>{step.error}</p>}{step.healed?.length ? <p>locator ซ่อมอัตโนมัติ: {step.healed.length}</p> : null}</li>)}</ol>
       {detail.hasScreenshot && <><h3>ภาพหน้าจอเมื่อจบการรัน</h3><img src={`/api/runs/${detail.id}/screenshot`} alt="ภาพหน้าจอผลการรัน" style={{ maxWidth: '100%', border: '1px solid var(--border-weak)' }} /></>}
     </section>}
-    <section className={s.section}><h2>รายการล่าสุด</h2>{loading ? <span role="status">กำลังโหลดผลการรัน…</span> : runs.length ? <div className={s.tableWrap}><table className={s.table}><thead><tr>{['สถานะ', 'เทส', 'เวลาเริ่ม', 'ระยะเวลา', 'ภาพหน้าจอ', ''].map((x) => <th key={x}>{x}</th>)}</tr></thead><tbody>{runs.map((r) => <tr key={r.id}><td><Badge color={r.passed ? 'green' : 'red'} text={r.passed ? 'ผ่าน' : 'ไม่ผ่าน'} /></td><td>{r.testName}</td><td>{new Date(r.startedAt).toLocaleString('th-TH')}</td><td>{(r.durationMs / 1000).toFixed(2)} วินาที</td><td>{r.hasScreenshot ? 'มี' : 'ไม่มี'}</td><td><Button size="sm" variant="secondary" onClick={() => void openRun(r.id)}>ดูรายละเอียด</Button></td></tr>)}</tbody></table></div> : <p>ยังไม่มีผลการรัน</p>}</section>
+    <section className={s.section}><h2>รายการล่าสุด</h2>{loading && !runs.length ? <span role="status">กำลังโหลดผลการรัน…</span> : runs.length ? <> <div className={s.tableWrap}><table className={s.table}><thead><tr>{['สถานะ', 'เทส', 'เวลาเริ่ม', 'ระยะเวลา', 'ภาพหน้าจอ', ''].map((x) => <th key={x}>{x}</th>)}</tr></thead><tbody>{runs.map((r) => <tr key={r.id}><td><Badge color={r.passed ? 'green' : 'red'} text={r.passed ? 'ผ่าน' : 'ไม่ผ่าน'} /></td><td>{r.testName}</td><td>{new Date(r.startedAt).toLocaleString('th-TH')}</td><td>{(r.durationMs / 1000).toFixed(2)} วินาที</td><td>{r.hasScreenshot ? 'มี' : 'ไม่มี'}</td><td><Button size="sm" variant="secondary" onClick={() => void openRun(r.id)}>ดูรายละเอียด</Button></td></tr>)}</tbody></table></div><TablePager page={page} pageSize={pageSize} total={total} label="ครั้ง" onPage={setPage} onPageSize={(size) => { setPageSize(size); setPage(1); }} /></> : <p>ยังไม่มีผลการรัน</p>}</section>
   </div>;
 }
 

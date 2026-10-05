@@ -193,3 +193,28 @@ describe('ลำดับตามเวลาที่รัน (ไม่ใ�
     expect((await store.repos.runs.listRecent({ projectId })).map((r) => r.id)).toEqual([newer, older]);
   });
 });
+
+describe('runs แบบแบ่งหน้า', () => {
+  it('คืนทีละหน้า เรียงใหม่สุดก่อน พร้อมจำนวนทั้งหมด และกรองตามโปรเจกต์', async () => {
+    const projectId = await store.repos.projects.create('paging');
+    const other = await store.repos.projects.create('paging-other');
+    const testId = await store.repos.tests.create(projectId, 'p');
+    const otherTest = await store.repos.tests.create(other, 'q');
+    const ids: number[] = [];
+    for (let i = 0; i < 25; i++) {
+      ids.push(await store.repos.runs.create({ testId, startedAt: new Date(Date.UTC(2026, 0, 1, 0, i)), durationMs: 1, passed: i % 2 === 0, results: [] }));
+    }
+    await store.repos.runs.create({ testId: otherTest, startedAt: new Date(), durationMs: 1, passed: true, results: [] });
+    const newestFirst = [...ids].reverse();
+
+    const first = await store.repos.runs.listPage({ projectId, limit: 10, offset: 0 });
+    expect(first.total).toBe(25);
+    expect(first.items.map((r) => r.id)).toEqual(newestFirst.slice(0, 10));
+    const last = await store.repos.runs.listPage({ projectId, limit: 10, offset: 20 });
+    expect(last.items.map((r) => r.id)).toEqual(newestFirst.slice(20));
+    expect((await store.repos.runs.listPage({ projectId, limit: 10, offset: 40 })).items).toEqual([]);
+    for (let i = 0; i < 80; i++) await store.repos.runs.create({ testId, startedAt: new Date(Date.UTC(2025, 0, 1, 0, i)), durationMs: 1, passed: true, results: [] });
+    expect((await store.repos.runs.listPage({ projectId, limit: 500, offset: 0 })).items).toHaveLength(100);
+    expect((await store.repos.runs.listPage({ projectId: other, limit: 10, offset: 0 })).total).toBe(1);
+  });
+});
