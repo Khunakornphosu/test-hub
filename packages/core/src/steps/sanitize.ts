@@ -1,4 +1,4 @@
-import { ACTIONS, FINGERPRINT_KEYS, LOCATOR_TYPES, MAX_FALLBACKS, SECRET_NAME, isActionName, stepSchema, type ActionName, type Fingerprint, type Locator, type LocatorType, type Step } from './types.js';
+import { ACTIONS, FINGERPRINT_KEYS, LOCATOR_TYPES, MAX_FALLBACKS, MAX_SCRIPT, SECRET_NAME, isActionName, stepSchema, type ActionName, type Fingerprint, type Locator, type LocatorType, type Step } from './types.js';
 
 type Raw = Record<string, unknown>;
 const isRecord = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -76,6 +76,11 @@ export function sanitizeStep(input: unknown): Step {
   }
   if (action === 'selectOption' && raw.label) step.label = String(raw.label);
   if (action === 'assertCount' && !/^\d+$/.test(String(step.expected).trim())) throw new Error('จำนวนต้องเป็นตัวเลข');
+  if (action === 'script') {
+    const script = typeof raw.script === 'string' ? raw.script : '';
+    if (script.length > MAX_SCRIPT) throw new Error(`โค้ดยาวเกิน ${MAX_SCRIPT.toLocaleString()} ตัวอักษร`);
+    step.script = script;
+  }
   if (action === 'useTest') {
     const id = Number(raw.testId);
     step.testId = Number.isInteger(id) && id > 0 ? id : null;
@@ -90,6 +95,7 @@ export function blankStep(action: ActionName): Step {
 
 export function isComplete(step: Step): boolean {
   if (step.action === 'useTest') return !!step.testId;
+  if (step.action === 'script') return !!step.script.trim();
   if (step.action === 'fillForm') return step.fields.length > 0 && step.fields.every((field) => !!field.locator || !!field.label?.trim());
   if (ACTIONS[step.action].locator !== 'required') return true;
   return 'locator' in step && !!step.locator;

@@ -3,6 +3,7 @@ import { z } from 'zod';
 
 export const SECRET_NAME = /^[A-Z_][A-Z0-9_]*$/;
 export const MAX_FALLBACKS = 4;
+export const MAX_SCRIPT = 10_000;
 
 export const LOCATOR_TYPES = {
   role: 'Role',
@@ -67,6 +68,7 @@ export const stepSchema = z.discriminatedUnion('action', [
   }),
   z.object({ ...id, action: z.literal('selectOption'), ...target, value: z.string(), label: z.string().optional() }),
   z.object({ ...id, action: z.literal('useTest'), testId: z.number().int().positive().nullable() }),
+  z.object({ ...id, action: z.literal('script'), script: z.string().max(MAX_SCRIPT) }),
   z.object({ ...id, action: z.literal('assertVisible'), ...target }),
   z.object({ ...id, action: z.literal('assertText'), ...target, expected: z.string() }),
   z.object({ ...id, action: z.literal('assertCount'), ...target, expected: z.string().regex(/^\d+$/) }),
@@ -109,6 +111,11 @@ export const ACTIONS: Record<ActionName, ActionSpec> = {
     group: 'action',
     fields: { testId: 'เทสที่ใช้ซ้ำ' },
     hints: { testId: 'ทุก step ของเทสนั้นจะรันตรงนี้ เช่น ใช้เทส Login ซ้ำในทุกเทส' },
+  },
+  script: {
+    label: 'รันโค้ด JavaScript',
+    group: 'action',
+    hints: { script: 'รันในหน้าเว็บ (ใช้ document, window, await ได้) · return false = ไม่ผ่าน · throw Error = ไม่ผ่านพร้อมข้อความ' },
   },
   assertVisible: { label: 'ตรวจว่าเห็น element', group: 'assert', locator: 'required' },
   assertText: {

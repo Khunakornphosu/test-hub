@@ -34,10 +34,18 @@ export function stepToCode(step: Step, ctx: CodegenContext = {}): string {
       ? '// TODO: ใช้เทสอื่นซ้ำ — ยังไม่ได้เลือกเทส'
       : step.action === 'fillForm'
         ? '// TODO: กรอกฟอร์มหลายช่อง — กรุณาเลือก element ของทุกช่อง'
+      : step.action === 'script'
+        ? '// TODO: รันโค้ด JavaScript — ยังไม่ได้เขียนโค้ด'
       : `// TODO: ${ACTIONS[step.action].label} — ยังไม่ได้เลือก element`;
   }
   const L = 'locator' in step && step.locator ? locatorToCode(step.locator) : null;
   switch (step.action) {
+    case 'script':
+      return [
+        'expect(await page.evaluate(async () => {',
+        ...step.script.replace(/\s+$/, '').split('\n').map((line) => (line ? `  ${line}` : '')),
+        '})).not.toBe(false);',
+      ].join('\n');
     case 'goto':
       return `await page.goto(${q(step.value)});`;
     case 'click':

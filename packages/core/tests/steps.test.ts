@@ -106,6 +106,15 @@ describe('sanitizeStep', () => {
     expect(blankStep('fillForm')).toEqual({ action: 'fillForm', fields: [{ locator: null, value: '' }] });
   });
 
+  it('script: เก็บโค้ดตามที่พิมพ์, ไม่รับค่าที่ไม่ใช่ข้อความ และจำกัดความยาว', () => {
+    expect(sanitizeStep({ action: 'script', script: '  return 1;\n' })).toEqual({ action: 'script', script: '  return 1;\n' });
+    expect(sanitizeStep({ action: 'script', script: { evil: true } })).toEqual({ action: 'script', script: '' });
+    expect(() => sanitizeStep({ action: 'script', script: 'x'.repeat(10_001) })).toThrow('โค้ดยาวเกิน');
+    expect(isComplete(blankStep('script'))).toBe(false);
+    expect(isComplete({ action: 'script', script: '  \n ' })).toBe(false);
+    expect(isComplete({ action: 'script', script: 'return true;' })).toBe(true);
+  });
+
   it('fillForm สมบูรณ์เมื่อมีอย่างน้อยหนึ่งช่องและทุกช่องมี locator หรือ label', () => {
     expect(isComplete(blankStep('fillForm'))).toBe(false);
     expect(isComplete({ action: 'fillForm', fields: [] })).toBe(false);
@@ -185,6 +194,13 @@ describe('codegen', () => {
     expect(stepToCode(blankStep('fillForm'))).toBe('// TODO: กรอกฟอร์มหลายช่อง — กรุณาเลือก element ของทุกช่อง');
   });
 
+  it('script ส่งออกเป็น page.evaluate ที่ไม่ผ่านเมื่อคืน false และเยื้องตามเทส', () => {
+    expect(stepToCode(blankStep('script'))).toBe('// TODO: รันโค้ด JavaScript — ยังไม่ได้เขียนโค้ด');
+    const step: Step = { action: 'script', script: "// ตรวจหัวข้อ\nconst h = document.querySelector('h1');\n\nreturn !!h;\n\n" };
+    expect(stepToCode(step)).toBe("expect(await page.evaluate(async () => {\n  // ตรวจหัวข้อ\n  const h = document.querySelector('h1');\n\n  return !!h;\n})).not.toBe(false);");
+    expect(exportTest('T', [step])).toContain("  expect(await page.evaluate(async () => {\n    // ตรวจหัวข้อ\n");
+  });
+
   it('fillForm สร้าง .fill() หนึ่งบรรทัดต่อช่อง และใช้ label เมื่อไม่มี locator', () => {
     const code = stepToCode({
       action: 'fillForm',
@@ -206,6 +222,9 @@ describe('describe', () => {
     expect(describeStep({ action: 'selectOption', locator: { type: 'role', role: 'combobox', name: 'บทบาท' }, value: 'dev', label: 'Developer' })).toBe('เลือก dropdown "บทบาท" "Developer"');
     expect(describeStep(blankStep('click'))).toBe('คลิก (ยังไม่ได้เลือก element)');
     expect(describeParts({ action: 'fillForm', fields: [{ label: 'a', value: '1' }, { label: 'b', value: '2' }] })).toMatchObject({ verb: 'กรอกฟอร์ม', value: '2 ช่อง' });
+    expect(describeStep({ action: 'script', script: '\n// ล้าง session\nsessionStorage.clear();' })).toBe('รันโค้ด ล้าง session');
+    expect(describeStep({ action: 'script', script: 'a();\nb();' })).toBe('รันโค้ด 2 บรรทัด');
+    expect(describeStep(blankStep('script'))).toBe('รันโค้ด (ยังไม่ได้เขียนโค้ด)');
   });
 
   it('step useTest แสดงชื่อและจำนวน step ของเทสที่ใช้ซ้ำ', () => {

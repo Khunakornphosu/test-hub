@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { Healed, RunStepResult } from './runs.js';
 import type { StepParts } from './steps/describe.js';
 import type { ActionSpec, ActionName, Fingerprint, LOCATOR_TYPES, Locator, Step } from './steps/types.js';
-import { isActionName } from './steps/types.js';
+import { MAX_SCRIPT, isActionName } from './steps/types.js';
 
 export const VIEWPORT = { width: 1280, height: 720 } as const;
 
@@ -40,6 +40,7 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('clearSteps') }),
   z.object({ type: z.literal('testLocator'), locator: z.unknown() }),
   z.object({ type: z.literal('selectOptions'), locator: z.unknown() }),
+  z.object({ type: z.literal('testScript'), script: z.string().max(MAX_SCRIPT) }),
   z.object({ type: z.literal('clearHighlight') }),
   z.object({ type: z.literal('acceptHeal'), testId: z.number().int().positive(), stepId: z.number().int(), locator: z.unknown() }),
   z.object({ type: z.literal('aiGenerate'), instruction: z.string().max(2000) }),
@@ -100,6 +101,7 @@ export type ServerMessage =
   | { type: 'picked'; locator: Locator; fallbacks?: Locator[]; fingerprint?: Fingerprint; text: string }
   | { type: 'element'; code: string | null }
   | { type: 'locatorTest'; count?: number; error?: string }
+  | { type: 'scriptResult'; ok: boolean; value?: string; error?: string; ms: number }
   | { type: 'selectOptions'; options?: { value: string; label: string }[]; error?: string }
   | { type: 'selectOpen'; x: number; y: number; options: { value: string; label: string; selected: boolean }[] }
   | { type: 'runStart' }

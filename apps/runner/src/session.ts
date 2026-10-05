@@ -15,6 +15,7 @@ import {
   locatorToCode,
   parseClientMessage,
   redactSnapshot,
+  runScript,
   sanitizeStep,
   stepToCode,
   toLocator,
@@ -380,6 +381,16 @@ export class Session {
       case 'selectOptions':
         this.send({ type: 'selectOptions', ...(await this.readSelectOptions(msg.locator)) });
         break;
+      case 'testScript': {
+        const started = Date.now();
+        try {
+          const { value } = await runScript(page, msg.script);
+          this.send({ type: 'scriptResult', ok: true, ...(value !== undefined && { value }), ms: Date.now() - started });
+        } catch (err) {
+          this.send({ type: 'scriptResult', ok: false, error: (err as Error).message, ms: Date.now() - started });
+        }
+        break;
+      }
       case 'clearHighlight':
         await clearHighlight(page);
         break;

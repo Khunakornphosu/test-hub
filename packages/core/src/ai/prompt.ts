@@ -1,6 +1,6 @@
 import { ACTIONS, LOCATOR_TYPES } from '../steps/types.js';
 
-const GENERATABLE = Object.keys(ACTIONS).filter((a) => a !== 'useTest' && a !== 'fillForm');
+const GENERATABLE = Object.keys(ACTIONS).filter((a) => a !== 'useTest' && a !== 'fillForm' && a !== 'script');
 const STEP_FIELDS = ['action', 'target', 'url', 'text', 'option', 'key', 'expected', 'secret'];
 
 /** schema ที่บังคับให้ Gemini ตอบเป็น JSON รูปแบบนี้ (แยก "element ไหน" ออกจาก "ค่าอะไร" ไม่ให้โมเดลใส่ผิดช่อง) */

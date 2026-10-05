@@ -96,6 +96,14 @@ export function describeParts(step: Step, ctx: DescribeContext = {}): StepParts 
     case 'check':
       parts.verb = 'ติ๊ก';
       break;
+    case 'script': {
+      parts.verb = 'รันโค้ด';
+      const lines = step.script.split('\n').map((line) => line.trim()).filter(Boolean);
+      const comment = lines[0]?.match(/^\/\/\s*(.+)/)?.[1];
+      parts.value = comment ?? (lines.length ? `${lines.length} บรรทัด` : null);
+      if (!lines.length) parts.missingTarget = 'ยังไม่ได้เขียนโค้ด';
+      break;
+    }
     case 'useTest': {
       parts.verb = 'ใช้ซ้ำ';
       const name = step.testId ? ctx.testName?.(step.testId) : undefined;

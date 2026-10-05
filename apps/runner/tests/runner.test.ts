@@ -241,6 +241,36 @@ describe('บันทึกและรัน', () => {
     expect(c.lastState().health[3]).toEqual({ runs: 1, healed: 0, failed: 1 });
     await c.close();
   }, 60_000);
+
+  it('step โค้ด: ลองรันกับหน้าเว็บสดผ่าน testScript และรันในเทสจริง', async () => {
+    const id = await newTest('script');
+    await store.repos.tests.saveSteps(id, [
+      { id: 1, action: 'goto', value: `${ORIGIN}/demo-login.html` },
+      { id: 2, action: 'script', script: "// ต้องมีช่องอีเมล\nreturn !!document.querySelector('#email');" },
+      { id: 3, action: 'script', script: 'return false;' },
+    ]);
+    const c = await Client.open();
+    c.send({ type: 'openTest', id });
+    c.send({ type: 'navigate', url: `${ORIGIN}/demo-login.html` });
+    const state = await c.waitFor('state', (m) => m.testId === id && m.steps.length === 3);
+    expect(state.steps[1]!.label).toBe('รันโค้ด ต้องมีช่องอีเมล');
+    await c.waitFor('url', (m) => m.url.endsWith('/demo-login.html'));
+
+    c.send({ type: 'testScript', script: 'return document.title;' });
+    const ok = await c.waitFor('scriptResult');
+    expect(ok).toMatchObject({ ok: true, value: expect.any(String) });
+    c.messages.length = 0;
+    c.send({ type: 'testScript', script: "throw new Error('ไม่เจอ');" });
+    expect(await c.waitFor('scriptResult')).toMatchObject({ ok: false, error: 'โค้ดผิดพลาด: ไม่เจอ' });
+
+    c.send({ type: 'run' });
+    const done = await c.waitFor('runDone', () => true, 30_000);
+    expect(done.passed).toBe(false);
+    const run = await store.repos.runs.get(done.runId);
+    expect(run!.results.map((r) => r.status)).toEqual(['passed', 'passed', 'failed']);
+    expect(run!.results[2]!.error).toBe('โค้ดคืนค่า false (ไม่ผ่าน)');
+    await c.close();
+  }, 60_000);
 });
 
 describe('SSRF', () => {

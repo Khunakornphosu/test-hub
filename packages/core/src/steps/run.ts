@@ -10,6 +10,43 @@ export const HEAL_GRACE = 1500;
 // สัดส่วนลายนิ้วมือที่ต้องตรงกัน จึงจะยอมรับว่าเป็น element เดิม
 export const HEAL_MIN_SCORE = 0.5;
 
+export const SCRIPT_TIMEOUT = 10_000;
+
+const cleanEvalError = (err: unknown): string =>
+  ((err as Error).message ?? String(err)).split('\n')[0]!.replace(/^page\.evaluate:\s*/, '').replace(/^Error:\s*/, '');
+
+/**
+ * รันโค้ดของผู้ใช้ในหน้าเว็บ (ไม่ใช่ใน runner) เป็นตัว async function
+ * return false = ไม่ผ่าน, throw = ไม่ผ่านพร้อมข้อความ, ค่าอื่นคืนเป็นข้อความสั้นๆ ไว้แสดงผล
+ */
+export async function runScript(page: Page, script: string, timeout = SCRIPT_TIMEOUT): Promise<{ value?: string }> {
+  // ห่อไว้ในหน้าเว็บเพื่อแปลงผลลัพธ์เป็นข้อความเอง ค่าอย่าง DOM element ส่งกลับมาตรงๆ ไม่ได้
+  const source = `(async () => {
+  const result = await (async () => {
+${script}
+  })();
+  if (result === false) return { failed: true };
+  if (result === undefined) return {};
+  let text;
+  try { text = typeof result === 'string' ? result : JSON.stringify(result); } catch { text = String(result); }
+  return { value: String(text ?? result).slice(0, 500) };
+})()`;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`โค้ดทำงานนานเกิน ${timeout / 1000} วินาที`)), timeout);
+  });
+  let out: { failed?: boolean; value?: string };
+  try {
+    out = await Promise.race([page.evaluate(source) as Promise<{ failed?: boolean; value?: string }>, timedOut]);
+  } catch (err) {
+    throw new Error(`โค้ดผิดพลาด: ${cleanEvalError(err)}`);
+  } finally {
+    clearTimeout(timer);
+  }
+  if (out.failed) throw new Error('โค้ดคืนค่า false (ไม่ผ่าน)');
+  return out.value === undefined ? {} : { value: out.value };
+}
+
 export function toLocator(page: Page, loc: Locator): PwLocator {
   switch (loc.type) {
     case 'role':
@@ -83,7 +120,7 @@ export interface RunStepOptions {
  */
 export async function runStep(page: Page, step: Step, { secrets = {}, checkUrl }: RunStepOptions = {}): Promise<{ healed?: Locator }> {
   if (!isComplete(step)) {
-    throw new Error(step.action === 'useTest' ? 'step นี้ยังไม่ได้เลือกเทส' : step.action === 'fillForm' ? 'กรุณาระบุ label ของทุกช่องในฟอร์ม' : 'step นี้ยังไม่ได้เลือก element');
+    throw new Error(step.action === 'useTest' ? 'step นี้ยังไม่ได้เลือกเทส' : step.action === 'fillForm' ? 'กรุณาระบุ label ของทุกช่องในฟอร์ม' : step.action === 'script' ? 'step นี้ยังไม่ได้เขียนโค้ด' : 'step นี้ยังไม่ได้เลือก element');
   }
   const resolved = 'locator' in step && step.locator ? await resolveTarget(page, step) : null;
   const L = resolved?.L as PwLocator;
@@ -150,6 +187,9 @@ export async function runStep(page: Page, step: Step, { secrets = {}, checkUrl }
         async () => page.url() === step.expected,
         () => `URL ไม่ตรง: คาดว่า ${step.expected} แต่เป็น ${page.url()}`
       );
+      break;
+    case 'script':
+      await runScript(page, step.script);
       break;
     case 'useTest':
       throw new Error('step "ใช้เทสอื่นซ้ำ" ต้องถูกขยายก่อนรัน');

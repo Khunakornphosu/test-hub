@@ -2,12 +2,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { css } from '@emotion/css';
 import type { GrafanaTheme2 } from '@grafana/data';
-import { Alert, Badge, Button, Field, Icon, IconButton, Input, Modal, PanelChrome, RadioButtonGroup, Select, TextArea, useStyles2 } from '@grafana/ui';
+import { Alert, Badge, Button, Field, Icon, IconButton, Input, Modal, PanelChrome, RadioButtonGroup, Select, Tab, TabsBar, TextArea, useStyles2 } from '@grafana/ui';
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { ActionName, Locator, Mode, ServerMessage, Step } from '@test-studio/core/client';
 import BrowserView, { type SelectMenu } from './BrowserView';
+import ScriptEditor, { type ScriptRunResult } from './ScriptEditor';
+import TestCodeView from './TestCodeView';
 import { api, type TestSummary } from '@/lib/api';
 import { useRunner } from '@/lib/runner';
 
@@ -37,6 +39,11 @@ export default function Workspace() {
   const [options, setOptions] = useState<{ value: string; label: string }[]>([]);
   const [secretValue, setSecretValue] = useState('');
   const [dialog, setDialog] = useState<'ai' | 'export' | null>(null);
+  const [scriptOpen, setScriptOpen] = useState(false);
+  const [scriptResult, setScriptResult] = useState<ScriptRunResult | null>(null);
+  const [scriptRunning, setScriptRunning] = useState(false);
+  const openScriptOnAdd = useRef(false);
+  const [centerTab, setCenterTab] = useState<'browser' | 'code'>('browser');
   const [aiText, setAiText] = useState('');
   const [aiResult, setAiResult] = useState<Extract<ServerMessage, { type: 'aiResult' }> | null>(null);
   const [exportResult, setExportResult] = useState<Extract<ServerMessage, { type: 'export' }> | null>(null);
@@ -53,8 +60,12 @@ export default function Workspace() {
     api.test(testId).then((t) => { setTestName(t.name); setNameDraft(t.name); return api.tests(t.projectId); }).then(setOtherTests).catch((e) => setMessage((e as Error).message));
   }, [testId]);
   const onMessage = useCallback((msg: ServerMessage) => {
-    if (msg.type === 'stepAdded') setSelectedId(msg.id);
-    if (msg.type === 'error' || msg.type === 'aiError') setMessage(msg.message);
+    if (msg.type === 'stepAdded') {
+      setSelectedId(msg.id);
+      if (openScriptOnAdd.current) { openScriptOnAdd.current = false; setScriptResult(null); setScriptOpen(true); }
+    }
+    if (msg.type === 'error' || msg.type === 'aiError') { setMessage(msg.message); setScriptRunning(false); }
+    if (msg.type === 'scriptResult') { setScriptRunning(false); setScriptResult({ ok: msg.ok, value: msg.value, error: msg.error, ms: msg.ms }); }
     if (msg.type === 'picked') { setPicked(msg.locator); setMessage(`เลือก ${msg.text || locatorLabel(msg.locator)} แล้ว`); }
     if (msg.type === 'selectOpen') setSelectMenu({ x: msg.x, y: msg.y, options: msg.options });
     if (msg.type === 'selectOptions') { setOptions(msg.options ?? []); if (msg.error) setMessage(msg.error); }
@@ -118,7 +129,9 @@ export default function Workspace() {
     setPicked(null);
   }, [picked, editor, runner.send]);
   const setModeAndSend = (next: Mode | undefined) => { const m = next ?? 'interact'; setMode(m); runner.send({ type: 'mode', mode: m }); };
-  const onAdd = (action: ActionName) => runner.send({ type: 'insertStep', action });
+  const onAdd = (action: ActionName) => { openScriptOnAdd.current = action === 'script'; runner.send({ type: 'insertStep', action }); };
+  const runScript = (script: string) => { setScriptRunning(true); setScriptResult(null); runner.send({ type: 'testScript', script }); };
+  const openScript = () => { setScriptResult(null); setScriptOpen(true); };
   const doPick = () => { pickFormFieldIndex.current = null; pickStepId.current = selected?.id ?? null; setPicked(null); setModeAndSend('pick'); };
   const doPickFormField = (index: number) => { pickStepId.current = selected?.id ?? null; pickFormFieldIndex.current = index; setPicked(null); setModeAndSend('pick'); };
   const steps = editor?.steps ?? [];
@@ -127,6 +140,12 @@ export default function Workspace() {
   const runStep = runDone ? runner.run.steps : null;
   const connectLabel = runner.conn === 'connected' ? 'เชื่อมต่อแล้ว' : runner.conn === 'reconnecting' ? 'กำลังเชื่อมต่อใหม่' : 'กำลังเชื่อมต่อ';
   const actions = runner.ready?.actions;
+  const editorSteps = editor?.steps;
+  useEffect(() => {
+    if (centerTab !== 'code' || !editorSteps) return;
+    const timer = setTimeout(() => runner.send({ type: 'export' }), 250);
+    return () => clearTimeout(timer);
+  }, [centerTab, editorSteps, testName, runner.send]);
   const fields = useMemo(() => selected && selected.action !== 'useTest' ? Object.entries(actions?.[selected.action]?.fields ?? {}) : [], [selected, actions]);
 
   return <div className={s.page}>
@@ -153,8 +172,12 @@ export default function Workspace() {
         <div className={s.addRow}><Select aria-label="เลือก action เพื่อเพิ่ม step" options={Object.entries(actions ?? {}).map(([value, spec]) => ({ value, label: spec.label }))} placeholder="เพิ่ม step…" onChange={(v) => v.value && onAdd(v.value as ActionName)} /></div>
       </div></aside>
       <main className={s.center}>
+        <TabsBar className={s.tabs}><Tab label="เบราว์เซอร์" icon="monitor" active={centerTab === 'browser'} onChangeTab={() => setCenterTab('browser')} /><Tab label="โค้ด" icon="brackets-curly" active={centerTab === 'code'} onChangeTab={() => setCenterTab('code')} /></TabsBar>
+        {centerTab === 'code' && <TestCodeView code={exportResult?.code ?? null} fileName={`${(testName || 'test').replace(/[^\p{L}\p{N}_-]+/gu, '-')}.spec.ts`} />}
+        <div className={s.browserPane} hidden={centerTab !== 'browser'}>
         <div className={s.urlbar}><IconButton name="arrow-left" aria-label="ย้อนกลับ" tooltip="ย้อนกลับ" disabled={!runner.ready} onClick={() => runner.send({ type: 'back' })} /><IconButton name="arrow-right" aria-label="ไปข้างหน้า" tooltip="ไปข้างหน้า" disabled={!runner.ready} onClick={() => runner.send({ type: 'forward' })} /><IconButton name="sync" aria-label="โหลดใหม่" tooltip="โหลดใหม่" disabled={!runner.ready} onClick={() => runner.send({ type: 'reload' })} /><Input value={address} aria-label="URL" placeholder="https://example.com" className={s.urlInput} onChange={(e) => setAddress(e.currentTarget.value)} onKeyDown={(e) => { if (e.key === 'Enter') runner.send({ type: 'navigate', url: address }); }} /><Button variant="secondary" disabled={!runner.ready || !address.trim()} onClick={() => runner.send({ type: 'navigate', url: address })}>เปิด</Button></div>
         <div className={s.browser}>{runner.ready ? <BrowserView width={viewport.width} height={viewport.height} send={runner.send} mode={mode} registerFrame={registerFrame} selectMenu={selectMenu} onCloseSelect={() => setSelectMenu(null)} disabled={editor?.running} /> : <div className={s.wait} role="status">{runner.conn === 'connecting' ? 'กำลังเปิดเบราว์เซอร์…' : 'กำลังเชื่อมต่อ runner…'}</div>}</div>
+        </div>
       </main>
       <aside className={s.right}><PanelChrome title={selected ? `แก้ไข: ${actions?.[selected.action]?.label ?? selected.action}` : 'เลือก step'} padding="none"><div className={s.editor}>
         {selected ? <>
@@ -173,6 +196,12 @@ export default function Workspace() {
           </Field>}
           {selected.action === 'fill' && <><Field label="ชื่อตัวแปรลับ (ถ้าต้องการ)"><Input value={String(('secret' in selected && selected.secret) || '')} placeholder="เช่น TEST_EMAIL" onChange={(e) => update({ secret: e.currentTarget.value.toUpperCase() })} /></Field>{'secret' in selected && selected.secret && <Field label={`ค่าใหม่ของ ${selected.secret}`} description="ค่าจะถูกบันทึกเป็น secret และไม่แสดงซ้ำ"><Input type="password" value={secretValue} onChange={(e) => setSecretValue(e.currentTarget.value)} /></Field>}</>}
           {selected.action === 'selectOption' && <><Button size="sm" variant="secondary" onClick={() => 'locator' in selected && selected.locator && runner.send({ type: 'selectOptions', locator: selected.locator })}>โหลดตัวเลือกจากหน้าเว็บ ({options.length})</Button>{options.length > 0 && <Field label="ตัวเลือก"><Select options={options.map((o) => ({ label: o.label || o.value, value: o.value }))} value={selected.value} onChange={(v) => update({ value: v.value, label: v.label })} /></Field>}</>}
+          {selected.action === 'script' && <Field label="โค้ด" description={actions?.script?.hints?.script}>
+            <div className={s.scriptBox}>
+              {selected.script.trim() ? <pre data-testid="script-preview" className={s.scriptPreview}>{selected.script.split('\n').slice(0, 8).join('\n')}{selected.script.split('\n').length > 8 ? '\n…' : ''}</pre> : <span className={s.muted}>ยังไม่ได้เขียนโค้ด</span>}
+              <Button size="sm" variant="secondary" icon="brackets-curly" onClick={openScript}>เปิดตัวแก้โค้ด</Button>
+            </div>
+          </Field>}
           {selected.action === 'useTest' && <Field label="เทสที่ใช้ซ้ำ" description={actions?.useTest?.hints?.testId}><Select options={otherTests.filter((t) => t.id !== testId).map((t) => ({ label: t.name, value: t.id }))} value={selected.testId ?? undefined} placeholder="เลือกเทส" onChange={(v) => update({ testId: v.value ?? null })} /></Field>}
           {health && <div className={s.health}><b>สุขภาพ locator</b><div>ผ่าน {health.runs - health.failed} / {health.runs} · ซ่อม {health.healed} · ล้มเหลว {health.failed}</div></div>}
           {'fallbacks' in selected && selected.fallbacks?.length ? <Alert severity="warning" title="พบ locator ที่ระบบซ่อมให้อัตโนมัติ"><div>ระบบใช้ {locatorLabel(selected.fallbacks[0]!)} แทน locator เดิม</div><Button size="sm" variant="primary" onClick={() => testId && runner.send({ type: 'acceptHeal', testId, stepId: selected.id!, locator: selected.fallbacks![0]! })}>ยอมรับ locator ใหม่</Button></Alert> : null}
@@ -180,6 +209,7 @@ export default function Workspace() {
         </> : <p>เพิ่ม step เพื่อเริ่มแก้ไข</p>}
       </div></PanelChrome></aside>
     </div>
+    {scriptOpen && selected?.action === 'script' && <ScriptEditor initial={selected.script} result={scriptResult} running={scriptRunning} disabled={!runner.ready || editor?.running} onRun={runScript} onSave={(script) => { update({ script }); setMessage('บันทึกโค้ดแล้ว'); }} onClose={() => setScriptOpen(false)} />}
     {dialog && <Modal title={dialog === 'ai' ? 'สร้าง step ด้วย AI' : 'ส่งออกเทส'} isOpen onDismiss={() => setDialog(null)}><div className={s.modal}>
       {dialog === 'ai' ? <>{runner.ready?.ai?.enabled ? <><p>อธิบายสิ่งที่ต้องการให้เทสทำ</p><TextArea value={aiText} onChange={(e) => setAiText(e.currentTarget.value)} placeholder="เช่น กรอกอีเมลและรหัสผ่าน แล้วกดเข้าสู่ระบบ" /><Button variant="primary" onClick={() => { setAiResult(null); runner.send({ type: 'aiGenerate', instruction: aiText }); }}>สร้าง step</Button>{aiResult && <><p>{aiResult.explanation}</p>{aiResult.items.map((item, i) => <div key={i}>{item.label} — {item.check === 'verified' ? 'ตรวจสอบผ่าน' : item.error ?? item.check}</div>)}<Button variant="primary" onClick={() => runner.send({ type: 'aiAccept', indexes: aiResult.items.flatMap((x) => x.index == null ? [] : [x.index]) })}>เพิ่ม step ที่เลือก</Button></>}</> : <Alert severity="info" title="ยังไม่ได้ตั้งค่า AI บน runner" />}</> : <>{exportResult ? <><Field label="โค้ด Playwright"><TextArea rows={12} readOnly value={exportResult.code} /></Field><Field label="ข้อมูล JSON"><TextArea rows={8} readOnly value={exportResult.json} /></Field></> : <span role="status">กำลังเตรียมข้อมูลส่งออก…</span>}</>}
     </div></Modal>}
@@ -201,5 +231,5 @@ const styles = (t: GrafanaTheme2) => ({
   left: css({ minHeight: 0, display: 'flex', flexDirection: 'column', border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default, background: t.colors.background.primary, '@media (max-width: 760px)': { gridRow: 2, maxHeight: 300 } }), panelTitle: css({ display: 'flex', alignItems: 'center', gap: 8, padding: t.spacing(1.5), fontWeight: 600, borderBottom: `1px solid ${t.colors.border.weak}` }), steps: css({ overflow: 'auto', padding: t.spacing(1), display: 'flex', flexDirection: 'column', gap: 5 }),
   step: css({ display: 'grid', gridTemplateColumns: '24px 1fr 24px', border: `1px solid ${t.colors.border.weak}`, borderRadius: 4, background: t.colors.background.primary, '&:hover': { borderColor: t.colors.primary.border } }), active: css({ borderColor: t.colors.primary.border, background: t.colors.action.selected }), drag: css({ border: 0, background: 'transparent', color: t.colors.text.secondary, cursor: 'grab' }), stepMain: css({ textAlign: 'left', border: 0, background: 'transparent', color: t.colors.text.primary, display: 'grid', gridTemplateColumns: '20px 1fr', gap: 4, padding: 7, cursor: 'pointer', b: { overflowWrap: 'anywhere' } }), meta: css({ gridColumn: '2', display: 'flex', alignItems: 'center', gap: 4, minWidth: 0, small: { flex: 1, minWidth: 0, color: t.colors.text.secondary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }),
   formField: css({ display: 'grid', gap: 6, padding: 8, borderRadius: 4, background: t.colors.background.secondary }), formFieldHead: css({ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 6 }), formFieldTarget: css({ fontSize: 12, color: t.colors.text.secondary, overflowWrap: 'anywhere', minWidth: 0 }), formFieldValue: css({ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto', gap: 6, alignItems: 'center' }), num: css({ color: t.colors.text.secondary }), delete: css({ border: 0, background: 'transparent', color: t.colors.text.secondary, cursor: 'pointer' }), addRow: css({ paddingTop: 6 }),
-  center: css({ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: t.spacing(1), '@media (max-width: 760px)': { gridRow: 1 } }), urlbar: css({ display: 'flex', alignItems: 'center', gap: 5 }), urlInput: css({ flex: 1, minWidth: 0 }), browser: css({ flex: 1, minHeight: 0, overflow: 'auto', display: 'grid', alignContent: 'start', justifyContent: 'center', background: t.colors.background.secondary, border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default }), wait: css({ display: 'flex', gap: 10, alignItems: 'center', padding: 30, color: t.colors.text.secondary }), right: css({ minHeight: 0, overflow: 'auto', '@media (max-width: 1100px)': { gridColumn: '1 / -1', maxHeight: 420 }, '@media (max-width: 760px)': { gridColumn: 'auto', gridRow: 3, maxHeight: 'none' } }), editor: css({ padding: t.spacing(1.5), display: 'flex', flexDirection: 'column', gap: t.spacing(1) }), locator: css({ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 4, background: t.colors.background.secondary, overflowWrap: 'anywhere' }), health: css({ padding: 10, background: t.colors.background.secondary, borderRadius: 4, fontSize: 12 }), footer: css({ display: 'flex', justifyContent: 'space-between', gap: 8, paddingTop: 12 }), modal: css({ display: 'grid', gap: 12, minWidth: 500, maxWidth: 760 }),
+  center: css({ minWidth: 0, minHeight: 0, display: 'flex', flexDirection: 'column', gap: t.spacing(1), '@media (max-width: 760px)': { gridRow: 1 } }), tabs: css({ flexShrink: 0 }), browserPane: css({ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', gap: t.spacing(1), '&[hidden]': { display: 'none' } }), urlbar: css({ display: 'flex', alignItems: 'center', gap: 5 }), urlInput: css({ flex: 1, minWidth: 0 }), browser: css({ flex: 1, minHeight: 0, overflow: 'auto', display: 'grid', alignContent: 'start', justifyContent: 'center', background: t.colors.background.secondary, border: `1px solid ${t.colors.border.weak}`, borderRadius: t.shape.radius.default }), wait: css({ display: 'flex', gap: 10, alignItems: 'center', padding: 30, color: t.colors.text.secondary }), right: css({ minHeight: 0, overflow: 'auto', '@media (max-width: 1100px)': { gridColumn: '1 / -1', maxHeight: 420 }, '@media (max-width: 760px)': { gridColumn: 'auto', gridRow: 3, maxHeight: 'none' } }), editor: css({ padding: t.spacing(1.5), display: 'flex', flexDirection: 'column', gap: t.spacing(1) }), locator: css({ display: 'flex', flexDirection: 'column', gap: 8, padding: 8, borderRadius: 4, background: t.colors.background.secondary, overflowWrap: 'anywhere' }), scriptBox: css({ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, padding: 8, borderRadius: 4, background: t.colors.background.secondary }), scriptPreview: css({ margin: 0, width: '100%', maxHeight: 180, overflow: 'auto', fontFamily: t.typography.fontFamilyMonospace, fontSize: 12, whiteSpace: 'pre' }), muted: css({ color: t.colors.text.secondary, fontSize: 12 }), health: css({ padding: 10, background: t.colors.background.secondary, borderRadius: 4, fontSize: 12 }), footer: css({ display: 'flex', justifyContent: 'space-between', gap: 8, paddingTop: 12 }), modal: css({ display: 'grid', gap: 12, minWidth: 500, maxWidth: 760 }),
 });

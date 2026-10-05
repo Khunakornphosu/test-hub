@@ -2,7 +2,7 @@
 import http from 'node:http';
 import { chromium, type Browser, type Page } from 'playwright';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { blankStep, runStep, sanitizeStep, type Step } from '../src/index.js';
+import { blankStep, runScript, runStep, sanitizeStep, type Step } from '../src/index.js';
 
 const PAGES: Record<string, string> = {
   '/v1': `<h1>เข้าสู่ระบบ</h1>
@@ -98,6 +98,23 @@ describe('runStep', () => {
     await expect(runStep(page, step)).rejects.toThrow('ยังไม่ได้ตั้งค่าตัวแปรลับ PW');
     await runStep(page, step, { secrets: { PW: 'hunter2' } });
     expect(await page.inputValue('#email')).toBe('hunter2');
+  });
+
+  it('script รันในหน้าเว็บ: ผ่าน/คืนค่า, return false, throw, syntax error และหมดเวลา', async () => {
+    await page.goto(`${base}/v1`);
+    await runStep(page, sanitizeStep({ action: 'script', script: "document.querySelector('#email').value = 'js@test';" }));
+    expect(await page.inputValue('#email')).toBe('js@test');
+    expect(await runScript(page, "return document.querySelector('h1').textContent;")).toEqual({ value: 'เข้าสู่ระบบ' });
+    expect(await runScript(page, 'return { n: document.querySelectorAll("li").length };')).toEqual({ value: '{"n":2}' });
+    expect(await runScript(page, 'await new Promise((r) => setTimeout(r, 50)); return true;')).toEqual({ value: 'true' });
+    expect(await runScript(page, 'return document.body;')).toEqual({ value: '{}' });
+    expect(await runScript(page, '// แค่คอมเมนต์')).toEqual({});
+
+    await expect(runStep(page, sanitizeStep({ action: 'script', script: 'return false;' }))).rejects.toThrow('โค้ดคืนค่า false (ไม่ผ่าน)');
+    await expect(runScript(page, "throw new Error('ไม่เจอปุ่ม');")).rejects.toThrow('โค้ดผิดพลาด: ไม่เจอปุ่ม');
+    await expect(runScript(page, 'return (;')).rejects.toThrow(/^โค้ดผิดพลาด: SyntaxError/);
+    await expect(runScript(page, 'await new Promise(() => {});', 300)).rejects.toThrow('โค้ดทำงานนานเกิน 0.3 วินาที');
+    await expect(runStep(page, blankStep('script'))).rejects.toThrow('step นี้ยังไม่ได้เขียนโค้ด');
   });
 
   it('fillForm กรอกทุกช่องใน step เดียว ทั้งจาก locator และ label', async () => {
